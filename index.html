@@ -68,6 +68,10 @@ function addHist(t, id, name) {
 }
 
 // ---------- maths ----------
+function splitOK(i) {
+  const c = i.claims || [], x = i.split;
+  return !!x && c.length > 1 && Object.keys(x).length === c.length && c.every(n => n in x) && Math.abs(c.reduce((a, n) => a + x[n], 0) - 100) < 0.01;
+}
 function calc(b) {
   const items = Object.values(b.items || {});
   const f = (1 + (b.svc || 0) / 100) * (1 + (b.tax || 0) / 100);
@@ -77,14 +81,31 @@ function calc(b) {
     sub += i.price;
     const c = i.claims || [];
     if (!c.length) unclaimed += i.price * f;
-    else c.forEach(n => { per[n] = (per[n] || 0) + i.price / c.length * f; (names[n] = names[n] || []).push(i.name); });
+    else c.forEach(n => { per[n] = (per[n] || 0) + i.price * (splitOK(i) ? i.split[n] / 100 : 1 / c.length) * f; (names[n] = names[n] || []).push(i.name); });
   });
   if (b.splitMode === 'equal' && (b.parts || []).length) {
     Object.keys(per).forEach(k => delete per[k]); Object.keys(names).forEach(k => delete names[k]);
     b.parts.forEach(n => { per[n] = sub * f / b.parts.length; names[n] = ['equal share']; });
     unclaimed = 0;
   }
-  return { per, names, total: sub * f, unclaimed };
+  let custom = null;
+  if (b.splitMode === 'custom' && (b.parts || []).length) {
+    Object.keys(per).forEach(k => delete per[k]); Object.keys(names).forEach(k => delete names[k]);
+    const T = sub * f, sp = b.split || {}, g = n => sp[n] || { t: 'pct', v: 0 };
+    let fixed = 0, pct = 0, hasPct = false;
+    b.parts.forEach(n => { if (g(n).t === 'amt') fixed += g(n).v; else { pct += g(n).v; hasPct = true; } });
+    const rest = T - fixed;
+    b.parts.forEach(n => { const x = g(n); per[n] = x.t === 'amt' ? x.v : rest * x.v / 100; names[n] = [x.t === 'amt' ? 'fixed amount' : x.v + '%']; });
+    const keys = Object.keys(per);
+    keys.forEach(k => per[k] = Math.round(per[k] * 100) / 100);
+    const ok = rest >= -0.005 && (hasPct ? Math.abs(pct - 100) < 0.005 : Math.abs(rest) < 0.005);
+    if (ok) {
+      const diff = Math.round((T - keys.reduce((a, k) => a + per[k], 0)) * 100) / 100;
+      if (diff) { const big = keys.reduce((a, k) => per[k] > per[a] ? k : a, keys[0]); per[big] = Math.round((per[big] + diff) * 100) / 100; }
+    }
+    unclaimed = 0; custom = { ok, fixed, pct, rest, hasPct };
+  }
+  return { per, names, total: sub * f, unclaimed, custom };
 }
 function balances(bills, sets) {
   const bal = {}, add = (n, v) => bal[n] = (bal[n] || 0) + v;
@@ -196,27 +217,31 @@ function viewBill(id) {
     const iv = document.getElementById('in'), pv = document.getElementById('ip');
     if (iv) keep = { n: iv.value, p: pv.value };
     const P = parts(), saved = ls.get(meKey(), ''), me = P.includes(saved) ? saved : '';
-    const c = calc(cur()), locked = bill.locked, eq = bill.splitMode === 'equal';
+    const c = calc(cur()), locked = bill.locked, eq = bill.splitMode === 'equal', cm = bill.splitMode === 'custom';
+    const sp = bill.split || {}, cu = c.custom;
+    const msg = !cu ? '' : cu.ok ? 'Adds up to the bill' : cu.rest < -0.005 ? 'Fixed amounts exceed the bill by ' + rm(-cu.rest) : cu.hasPct ? 'Percentages total ' + (Math.round(cu.pct * 100) / 100) + '%, need 100%' : rm(cu.rest) + ' still unassigned';
+    const cust = cm ? `<div class="card"><h2>Custom split</h2><p class="m">Set a percentage or a fixed RM amount for each person. Fixed amounts come off the bill total first, and percentages share the rest and must reach 100%.</p>${P.map(n => { const x = sp[n] || { t: 'pct', v: 0 }; return `<div class="row"><span class="n">${esc(n)}</span><input type="number" inputmode="decimal" min="0" step="0.01" style="width:96px" value="${x.v || ''}" data-a="cv" data-n="${esc(n)}" aria-label="Value for ${esc(n)}" ${locked ? 'disabled' : ''}><button class="s" data-a="ct" data-n="${esc(n)}" ${locked ? 'disabled' : ''} aria-label="Switch between percent and RM">${x.t === 'amt' ? 'RM' : '%'}</button></div>`; }).join('')}<p><span class="tag">${msg}</span></p></div>` : '';
     const items = Object.entries(bill.items || {}).sort((a, b) => a[1].o - b[1].o);
     const sum = Object.entries(c.per);
     const opts = pick ? (pick.kind === 'parts' ? pool() : P) : [];
     const title = pick ? (pick.kind === 'parts' ? "Who's in this bill?" : pick.kind === 'item' ? 'Whose item is ' + esc((bill.items[pick.k] || {}).name) + '?' : 'Whose item is this?') : '';
     const panel = pick ? `<div class="card"><div class="row"><h2>${title}</h2><button class="s" data-a="pa">${opts.every(o => pick.sel.includes(o)) ? 'Clear all' : 'Select all'}</button></div>
-      ${opts.map(o => `<div class="row item" tabindex="0" role="checkbox" aria-checked="${pick.sel.includes(o)}" data-a="pt" data-n="${esc(o)}"><span class="n">${esc(o)}</span><b>${pick.sel.includes(o) ? '✓' : ''}</b></div>`).join('') || '<p class="m">No people yet. Ask the organizer to add you to the trip.</p>'}
+      ${opts.map(o => `<div class="row item" tabindex="0" role="checkbox" aria-checked="${pick.sel.includes(o)}" data-a="pt" data-n="${esc(o)}"><span class="n">${esc(o)}</span>${pick.pct && pick.sel.includes(o) ? `<input type="number" inputmode="decimal" min="0" step="0.01" style="width:84px" data-a="pv" data-n="${esc(o)}" value="${pick.pct[o] ?? ''}" aria-label="Percent for ${esc(o)}"><span>%</span>` : ''}<b>${pick.sel.includes(o) ? '✓' : ''}</b></div>`).join('') || '<p class="m">No people yet. Ask the organizer to add you to the trip.</p>'}
+      ${pick.kind === 'item' && pick.sel.length > 1 ? `<div class="bar"><button class="s" data-a="pm">${pick.pct ? 'Split evenly' : 'Split by %'}</button>${pick.pct ? `<span class="tag">Total ${Math.round(pick.sel.reduce((a, n) => a + (pick.pct[n] || 0), 0) * 100) / 100}%, need 100%</span>` : ''}</div>` : ''}
       <div class="bar"><button data-a="pd">Done</button><button class="s" data-a="pc">Cancel</button></div></div>` : '';
     app.innerHTML = `<a href="${bill.tripId ? '#/t/' + esc(bill.tripId) : '#/'}">${bill.tripId ? 'Back to trip' : 'All bills'}</a><h1>${esc(bill.name)} ${locked ? '<span class="tag">Locked</span>' : ''}</h1>
     <div class="bar"><button class="s" data-a="cl">Copy link to share</button></div>${panel}
     <div class="card"><h2>Who's in this bill?</h2><div class="chips">${P.map(m => `<span class="chip">${esc(m)}</span>`).join('') || '<span class="m">Nobody yet.</span>'}</div><div class="bar"><button class="s" data-a="pp" ${locked ? 'disabled' : ''}>${P.length} of ${pool().length} people</button></div></div>
     <div class="card"><h2>Who are you?</h2><div class="chips">${P.map(m => `<button class="chip ${m === me ? 'on' : ''}" data-a="me" data-n="${esc(m)}">${esc(m)}</button>`).join('')}</div><p class="m">Not listed? Ask the organizer to add you.</p></div>
-    <div class="card"><h2>Items</h2><p class="m">${eq ? 'This bill is split equally, so claims are ignored.' : 'Tap an item to change who it belongs to, or press Me too for yourself.'}</p>
-    ${items.map(([k, i]) => { const cl = i.claims || []; return `<div class="row item ${cl.includes(me) ? 'mine' : ''}" tabindex="0" role="button" data-a="ei" data-k="${k}"><span class="n">${esc(i.name)}<br><span class="m">${esc(cl.join(', '))}</span>${cl.length ? '' : '<span class="tag">unclaimed</span>'}</span><span class="amt">${rm(i.price)}</span>${locked ? '' : `<button class="s" data-a="cl2" data-k="${k}">${cl.includes(me) ? 'Not me' : 'Me too'}</button><button class="x" data-a="di" data-k="${k}" aria-label="Delete item">✕</button>`}</div>`; }).join('') || '<p class="m">No items yet.</p>'}
+    <div class="card"><h2>Items</h2><p class="m">${eq || cm ? 'This bill is split ' + (eq ? 'equally' : 'by custom amounts') + ', so claims are ignored.' : 'Tap an item to change who it belongs to, or press Me too for yourself.'}</p>
+    ${items.map(([k, i]) => { const cl = i.claims || []; return `<div class="row item ${cl.includes(me) ? 'mine' : ''}" tabindex="0" role="button" data-a="ei" data-k="${k}"><span class="n">${esc(i.name)}<br><span class="m">${esc(cl.map(n => splitOK(i) ? n + ' ' + i.split[n] + '%' : n).join(', '))}</span>${cl.length ? '' : '<span class="tag">unclaimed</span>'}</span><span class="amt">${rm(i.price)}</span>${locked ? '' : `<button class="s" data-a="cl2" data-k="${k}">${cl.includes(me) ? 'Not me' : 'Me too'}</button><button class="x" data-a="di" data-k="${k}" aria-label="Delete item">✕</button>`}</div>`; }).join('') || '<p class="m">No items yet.</p>'}
     ${locked ? '' : `<div class="f"><input id="in" placeholder="Item name" aria-label="Item name" value="${esc(keep.n)}"><input id="ip" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Price" aria-label="Price" value="${esc(keep.p)}"></div><div class="f"><button class="s" data-a="no">${newOwn.length ? newOwn.length + ' owner' + (newOwn.length > 1 ? 's' : '') : 'Whose item?'}</button><button data-a="ai">Add item</button></div>`}</div>
     <div class="card"><h2>Charges and payer</h2>
-    <div class="row"><span class="n">Split method</span><select data-a="sm" ${locked ? 'disabled' : ''}><option value="items" ${eq ? '' : 'selected'}>By items</option><option value="equal" ${eq ? 'selected' : ''}>Equally</option></select></div>
+    <div class="row"><span class="n">Split method</span><select data-a="sm" ${locked ? 'disabled' : ''}><option value="items" ${eq || cm ? '' : 'selected'}>By items</option><option value="equal" ${eq ? 'selected' : ''}>Equally</option><option value="custom" ${cm ? 'selected' : ''}>Custom % / RM</option></select></div>
     <div class="row"><span class="n">Service charge</span><span class="amt">${bill.svc}%</span><button class="s" data-a="sv" ${locked ? 'disabled' : ''}>Edit</button></div>
     <div class="row"><span class="n">SST / tax (on top of service)</span><span class="amt">${bill.tax}%</span><button class="s" data-a="tx" ${locked ? 'disabled' : ''}>Edit</button></div>
     <div class="row"><span class="n">Paid by</span><select data-a="py" ${locked ? 'disabled' : ''}><option value="">Choose</option>${P.map(m => `<option ${m === bill.payer ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></div></div>
-    <div class="card"><h2>Who owes what</h2><div class="big">${rm(c.total)}</div><p class="m">bill total</p>
+    ${cust}<div class="card"><h2>Who owes what</h2><div class="big">${rm(c.total)}</div><p class="m">bill total</p>
     ${c.unclaimed > 0.005 ? `<p><span class="tag">${rm(c.unclaimed)} not claimed yet</span></p>` : ''}
     ${sum.map(([n, v]) => `<div class="row"><span class="n"><b>${esc(n)}</b><br><span class="m">${esc(c.names[n].join(', '))}</span></span><span class="amt">${rm(v)}</span></div>`).join('') || '<p class="m">Nobody has claimed anything yet.</p>'}
     <div class="bar"><button data-a="cs">Copy summary for WhatsApp</button></div></div>
@@ -236,10 +261,15 @@ function viewBill(id) {
     cl: el => copy(link('b', id), el),
     me: el => { ls.set(meKey(), el.dataset.n); draw(); },
     pp: () => { pick = { kind: 'parts', sel: [...parts()] }; draw(); },
-    ei: el => { if (bill.locked) return; const k = el.dataset.k; pick = { kind: 'item', k, sel: [...(bill.items[k].claims || [])] }; draw(); },
+    ei: el => { if (bill.locked) return; const k = el.dataset.k; pick = { kind: 'item', k, sel: [...(bill.items[k].claims || [])], pct: splitOK(bill.items[k]) ? { ...bill.items[k].split } : null }; draw(); },
     no: () => { pick = { kind: 'new', sel: [...newOwn] }; draw(); },
-    pt: el => { const n = el.dataset.n, i = pick.sel.indexOf(n); if (i < 0) pick.sel.push(n); else pick.sel.splice(i, 1); draw(); },
-    pa: () => { const o = pick.kind === 'parts' ? pool() : parts(); pick.sel = o.every(x => pick.sel.includes(x)) ? [] : [...o]; draw(); },
+    pm: () => {
+      if (pick.pct) pick.pct = null;
+      else { const e = Math.floor(10000 / pick.sel.length) / 100; pick.pct = {}; pick.sel.forEach(n => pick.pct[n] = e); pick.pct[pick.sel[0]] = Math.round((e + 100 - e * pick.sel.length) * 100) / 100; }
+      draw();
+    },
+    pt: el => { pick.pct = null; const n = el.dataset.n, i = pick.sel.indexOf(n); if (i < 0) pick.sel.push(n); else pick.sel.splice(i, 1); draw(); },
+    pa: () => { pick.pct = null; const o = pick.kind === 'parts' ? pool() : parts(); pick.sel = o.every(x => pick.sel.includes(x)) ? [] : [...o]; draw(); },
     pc: () => { pick = null; draw(); },
     pd: () => {
       const sel = pick.sel;
@@ -250,7 +280,14 @@ function viewBill(id) {
         Object.entries(bill.items || {}).forEach(([k, i]) => { const all = i.claims || [], cl = all.filter(n => sel.includes(n)); if (cl.length !== all.length) { o['items.' + k + '.claims'] = cl; lost++; } });
         if (lost && !confirm('Removing people will clear their claims on ' + lost + ' item(s). Continue?')) return;
         upd(o);
-      } else if (pick.kind === 'item') upd({ ['items.' + pick.k + '.claims']: sel });
+      } else if (pick.kind === 'item') {
+        let spl = FV.delete();
+        if (pick.pct && sel.length > 1) {
+          if (Math.abs(sel.reduce((a, n) => a + (pick.pct[n] || 0), 0) - 100) > 0.01) { alert('Percentages must add up to 100%.'); return; }
+          spl = {}; sel.forEach(n => spl[n] = pick.pct[n] || 0);
+        }
+        upd({ ['items.' + pick.k + '.claims']: sel, ['items.' + pick.k + '.split']: spl });
+      }
       else newOwn = sel;
       pick = null; draw();
     },
@@ -271,14 +308,17 @@ function viewBill(id) {
     di: el => { if (confirm('Delete this item?')) upd({ ['items.' + el.dataset.k]: FV.delete() }); },
     sv: () => { const v = num('Service charge %', bill.svc); if (v !== null) upd({ svc: v }); },
     tx: () => { const v = num('SST / tax %', bill.tax); if (v !== null) upd({ tax: v }); },
-    lk: () => upd({ locked: !bill.locked }),
+    ct: el => { const n = el.dataset.n, sp = { ...(bill.split || {}) }, x = sp[n] || { t: 'pct', v: 0 }; sp[n] = { t: x.t === 'amt' ? 'pct' : 'amt', v: x.v }; upd({ split: sp }); },
+    lk: () => { if (!bill.locked && bill.splitMode === 'custom' && !calc(cur()).custom.ok) { alert('Make the custom split add up to the bill before locking.'); return; } upd({ locked: !bill.locked }); },
     db: () => { if (confirm('Delete this whole bill for everyone?')) ref.delete().then(() => { ls.set('hist', ls.get('hist', []).filter(x => x.id !== id)); go(bill.tripId ? '/t/' + bill.tripId : '/'); }); },
     cs: el => {
       const c = calc(cur());
       copy(bill.name + '\nTotal ' + rm(c.total) + (bill.payer ? ', paid by ' + bill.payer : '') + '\n' + Object.entries(c.per).map(([n, v]) => n + ': ' + rm(v) + ' (' + c.names[n].join(', ') + ')').join('\n') + '\n' + link('b', id), el);
     }
   });
-  app.onchange = e => { const a = e.target.dataset.a; if (a === 'py') upd({ payer: e.target.value }); if (a === 'sm') upd({ splitMode: e.target.value }); };
+  app.onchange = e => { const a = e.target.dataset.a;
+    if (a === 'pv' && pick) { pick.pct = pick.pct || {}; pick.pct[e.target.dataset.n] = Math.max(0, parseFloat(e.target.value) || 0); draw(); return; } if (a === 'py') upd({ payer: e.target.value }); if (a === 'sm') upd({ splitMode: e.target.value });
+    if (a === 'cv') { const n = e.target.dataset.n, sp = { ...(bill.split || {}) }, x = sp[n] || { t: 'pct', v: 0 }; sp[n] = { t: x.t, v: Math.max(0, parseFloat(e.target.value) || 0) }; upd({ split: sp }); } };
   app.onkeydown = e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('item')) { e.preventDefault(); e.target.click(); } };
 }
 
