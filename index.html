@@ -156,6 +156,12 @@ function viewHome() {
   <div class="bar"><button data-a="nt">New trip</button><button class="s" data-a="nb">New single bill</button></div>
   <div class="card"><h2>Your trips and bills</h2>${h.length ? h.map(x => `<div class="row"><a class="n" href="#/${x.t}/${esc(x.id)}">${x.t === 't' ? 'Trip: ' : ''}${esc(x.name)}</a><button class="x" data-a="rm" data-id="${esc(x.id)}" aria-label="Remove from list">Remove</button></div>`).join('') : '<p class="m">Nothing yet. Start with a new trip or bill.</p>'}
   ${h.length ? '<div class="bar"><button class="s" data-a="bk">Copy all my links</button></div><p class="m">This list lives on this phone only. Saved links still open your bills anywhere.</p>' : ''}</div>`;
+  h.filter(x => x.t === 'b').forEach(x => db.collection('bills').doc(x.id).get().then(d => {
+    if (d.exists && d.data().tripId) {
+      ls.set('hist', ls.get('hist', []).filter(y => y.id !== x.id));
+      if (['', '#', '#/'].includes(location.hash)) viewHome();
+    }
+  }).catch(() => {}));
   on({
     nt: () => { const n = prompt('Trip name (e.g. Langkawi 2026)'); if (!n) return; const id = rid(); db.collection('trips').doc(id).set({ name: n.trim(), members: [], settlements: [], created: Date.now() }).then(() => go('/t/' + id)); },
     nb: () => newBill(null),
@@ -250,8 +256,8 @@ function viewBill(id) {
   sub(ref, d => {
     bill = d.exists ? d.data() : false;
     if (bill) {
-      addHist('b', id, bill.name);
-      if (bill.tripId && !tripSub) { tripSub = true; sub(db.collection('trips').doc(bill.tripId), t => { trip = t.exists ? t.data() : null; draw(); }); }
+      if (bill.tripId) ls.set('hist', ls.get('hist', []).filter(x => x.id !== id)); else addHist('b', id, bill.name);
+      if (bill.tripId && !tripSub) { tripSub = true; sub(db.collection('trips').doc(bill.tripId), t => { trip = t.exists ? t.data() : null; if (trip) addHist('t', bill.tripId, trip.name); draw(); }); }
     }
     draw();
   });
