@@ -7,11 +7,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#e6edf1;--paper:#fff;--ink:#17283b;--mute:#5d6f80;--line:#c4d0d8;--acc:#0b7a75;--accbg:#d8f0ee;--warn:#b86e00;--warnbg:#fff1d6;--bad:#b3261e}
-@media (prefers-color-scheme:dark){:root{--bg:#0f1820;--paper:#18252f;--ink:#e8eff4;--mute:#93a5b3;--line:#32444f;--acc:#4fd1c5;--accbg:#12373a;--warn:#f0b24a;--warnbg:#3a2c0f;--bad:#ff8a80}}
+:root{--bg:#e6edf1;--paper:#fff;--ink:#17283b;--mute:#5d6f80;--line:#c4d0d8;--acc:#0b8a70;--accbg:#dcf5ee;--onacc:#fff;--warn:#b86e00;--warnbg:#fff1d6;--bad:#d9480f}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1820;--paper:#18252f;--ink:#e8eff4;--mute:#93a5b3;--line:#32444f;--acc:#3ddbb4;--accbg:#12372f;--onacc:#06241c;--warn:#f0b24a;--warnbg:#3a2c0f;--bad:#ff8a5c}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 Figtree,system-ui,sans-serif;padding:max(12px,env(safe-area-inset-top)) 12px 40px}
-#app{max-width:560px;margin:0 auto}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 Figtree,system-ui,sans-serif;padding:0 0 96px}
+#app{max-width:560px;margin:0 auto;padding:0 12px}
 h1{font-size:1.6rem;font-weight:800;margin:.4em 0 .2em;letter-spacing:-.02em}
 h2{font-size:1.05rem;font-weight:800;margin:0 0 .5em}
 .card{background:var(--paper);border-radius:6px;padding:14px 16px;margin:12px 0;box-shadow:0 0 0 1px var(--line)}
@@ -21,7 +21,7 @@ h2{font-size:1.05rem;font-weight:800;margin:0 0 .5em}
 .row .n{flex:1;min-width:0}
 .amt{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
 button,select,input{font:inherit;color:inherit}
-button{background:var(--ink);color:var(--paper);border:0;border-radius:6px;padding:9px 14px;font-weight:600;cursor:pointer}
+button{background:var(--acc);color:var(--onacc);border:0;border-radius:6px;padding:9px 14px;font-weight:600;cursor:pointer}
 button.s{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--line)}
 button.x{background:transparent;color:var(--bad);padding:4px 8px}
 button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,.item:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
@@ -29,7 +29,7 @@ input,select{background:var(--bg);border:1.5px solid var(--line);border-radius:6
 .f{display:flex;gap:8px;margin-top:8px}.f input:first-child{flex:1}.f input[type=number]{width:96px}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{border-radius:99px;padding:7px 14px;background:var(--bg);box-shadow:inset 0 0 0 1.5px var(--line);cursor:pointer;font-weight:600;border:0;color:var(--ink)}
-.chip.on{background:var(--acc);color:var(--paper);box-shadow:none}
+.chip.on{background:var(--acc);color:var(--onacc);box-shadow:none}
 .item{cursor:pointer}
 .item.mine{background:var(--accbg);margin:0 -16px;padding:9px 16px}
 .tag{display:inline-block;font-size:.8rem;border-radius:4px;padding:1px 7px;background:var(--warnbg);color:var(--warn);font-weight:600}
@@ -37,6 +37,16 @@ input,select{background:var(--bg);border:1.5px solid var(--line);border-radius:6
 a{color:var(--acc);font-weight:600}
 .pos{color:var(--acc)}.neg{color:var(--bad)}
 .bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.hd{margin:0 -12px 12px;padding:calc(env(safe-area-inset-top,0px) + 16px) 16px 18px;background:var(--acc);color:var(--onacc)}
+.hd h1{margin:.2em 0 0;color:inherit}.hd a{color:inherit;font-weight:600;text-decoration:none}.hd .m{color:inherit;opacity:.92;margin:.2em 0 0}
+.fab{position:fixed;right:max(16px,calc(50% - 264px));bottom:max(20px,env(safe-area-inset-bottom));border-radius:99px;padding:14px 20px;box-shadow:0 4px 14px rgba(0,0,0,.3);z-index:5}
+.seg{display:flex;margin:12px 0}.seg button{flex:1;background:var(--paper);color:var(--ink);border-radius:0;box-shadow:inset 0 0 0 1.5px var(--line)}
+.seg button:first-child{border-radius:6px 0 0 6px}.seg button:last-child{border-radius:0 6px 6px 0}.seg button.on{background:var(--acc);color:var(--onacc)}
+a.ex,.row.ex{color:var(--ink);text-decoration:none;font-weight:400}a.n.ex{display:flex;align-items:center;font-weight:600}
+.av{display:inline-grid;place-items:center;width:38px;height:38px;border-radius:8px;background:var(--accbg);color:var(--acc);font-weight:800;margin-right:10px;flex:none}
+.dt{width:34px;text-align:center;font-size:.75rem;color:var(--mute);line-height:1.15;flex:none}.dt b{font-size:1.05rem;color:var(--ink)}
+.st{text-align:right;font-size:.8rem;white-space:nowrap}.st b{display:block;font-size:1rem}
+.dd{background:var(--bg);border-radius:6px;padding:4px 12px 10px;margin:6px 0 10px;box-shadow:inset 0 0 0 1.5px var(--line);max-height:60vh;overflow:auto}.dd .row{padding:8px 0}
 </style>
 </head>
 <body>
@@ -151,56 +161,83 @@ const on = (map) => {
 
 // ---------- home ----------
 function viewHome() {
-  const h = ls.get('hist', []);
-  app.innerHTML = `<h1>Split the bill</h1><p class="m">Make a trip or a single bill, then share the link. Friends pick their own items, no sign-in.</p>
-  <div class="bar"><button data-a="nt">New trip</button><button class="s" data-a="nb">New single bill</button></div>
-  <div class="card"><h2>Your trips and bills</h2>${h.length ? h.map(x => `<div class="row"><a class="n" href="#/${x.t}/${esc(x.id)}">${x.t === 't' ? 'Trip: ' : ''}${esc(x.name)}</a><button class="x" data-a="rm" data-id="${esc(x.id)}" aria-label="Remove from list">Remove</button></div>`).join('') : '<p class="m">Nothing yet. Start with a new trip or bill.</p>'}
-  ${h.length ? '<div class="bar"><button class="s" data-a="bk">Copy all my links</button></div><p class="m">This list lives on this phone only. Saved links still open your bills anywhere.</p>' : ''}</div>`;
-  h.filter(x => x.t === 'b').forEach(x => db.collection('bills').doc(x.id).get().then(d => {
+  const h = ls.get('hist', []), gs = h.filter(x => x.t === 't'), bs = h.filter(x => x.t === 'b');
+  const row = x => `<div class="row"><a class="n ex" href="#/${x.t}/${esc(x.id)}"><span class="av">${esc((x.name || '?')[0].toUpperCase())}</span>${esc(x.name)}</a><button class="x" data-a="rm" data-id="${esc(x.id)}" aria-label="Remove from list">Remove</button></div>`;
+  app.innerHTML = `<div class="hd"><h1>Groups</h1><p class="m">Share costs with friends. Everyone with the link can join in, no sign-in.</p></div>
+  <div class="card">${gs.map(row).join('') || '<p class="m">No groups yet. Start one for a trip, a household, or any shared costs.</p>'}<div class="bar"><button class="s" data-a="nt">Start a new group</button></div></div>
+  <div class="card"><h2>Non-group expenses</h2>${bs.map(row).join('') || '<p class="m">One-off expenses outside a group show up here.</p>'}<div class="bar"><button class="s" data-a="nb">Add a non-group expense</button></div></div>
+  ${h.length ? '<div class="bar"><button class="s" data-a="bk">Copy all my links</button></div><p class="m">This list lives on this phone only. Saved links still open your groups anywhere.</p>' : ''}
+  <button class="fab" data-a="nt">+ New group</button>`;
+  bs.forEach(x => db.collection('bills').doc(x.id).get().then(d => {
     if (d.exists && d.data().tripId) {
       ls.set('hist', ls.get('hist', []).filter(y => y.id !== x.id));
       if (['', '#', '#/'].includes(location.hash)) viewHome();
     }
   }).catch(() => {}));
   on({
-    nt: () => { const n = prompt('Trip name (e.g. Langkawi 2026)'); if (!n) return; const id = rid(); db.collection('trips').doc(id).set({ name: n.trim(), members: [], settlements: [], created: Date.now() }).then(() => go('/t/' + id)); },
+    nt: () => { const n = prompt('Group name (e.g. Langkawi 2026)'); if (!n) return; const id = rid(); db.collection('trips').doc(id).set({ name: n.trim(), members: [], settlements: [], created: Date.now() }).then(() => go('/t/' + id)); },
     nb: () => newBill(null),
     rm: el => { ls.set('hist', ls.get('hist', []).filter(x => x.id !== el.dataset.id)); viewHome(); },
     bk: el => copy(ls.get('hist', []).map(x => x.name + ': ' + link(x.t, x.id)).join('\n'), el)
   });
 }
 function newBill(tripId) {
-  const n = prompt('Bill name (e.g. Seafood dinner)'); if (!n) return;
+  const n = prompt('Expense description (e.g. Seafood dinner)'); if (!n) return;
   const mk = m => {
     const id = rid();
     db.collection('bills').doc(id).set({ name: n.trim(), tripId: tripId || null, members: tripId ? [] : m, parts: m, items: {}, svc: 0, tax: 0, payer: '', splitMode: 'items', locked: false, created: Date.now() }).then(() => go('/b/' + id));
   };
-  if (tripId) db.collection('trips').doc(tripId).get().then(d => { const m = (d.data() || {}).members || []; if (!m.length) { alert('Add people to the trip first.'); return; } mk(m); });
+  if (tripId) db.collection('trips').doc(tripId).get().then(d => { const m = (d.data() || {}).members || []; if (!m.length) { alert('Add people to the group first.'); return; } mk(m); });
   else { const m = [...new Set((prompt('Who is in this bill? Names separated by commas') || '').split(',').map(s => s.trim()).filter(Boolean))]; if (m.length) mk(m); }
 }
 
 // ---------- trip ----------
 function viewTrip(id) {
-  let trip = null, bills = [];
+  let trip = null, bills = [], tab = 'x';
   const ref = db.collection('trips').doc(id);
+  const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const draw = () => {
-    if (trip === null) { app.innerHTML = '<p class="m">Loading...</p>'; return; }
-    if (trip === false) { app.innerHTML = '<div class="card"><b>Trip not found.</b> <a href="#/">Back</a></div>'; return; }
+    if (trip === null) { app.innerHTML = '<p class="m" style="padding:16px">Loading...</p>'; return; }
+    if (trip === false) { app.innerHTML = '<div class="card"><b>Group not found.</b> <a href="#/">Back</a></div>'; return; }
     bills.forEach(b => { b.parts = b.parts || trip.members; });
+    const saved = ls.get('me_' + id, ''), me = trip.members.includes(saved) ? saved : '';
     const bal = balances(bills, trip.settlements), sg = suggest(bal);
-    const spent = bills.reduce((s, b) => s + calc(b).total, 0);
-    app.innerHTML = `<a href="#/">All trips</a><h1>${esc(trip.name)}</h1>
-    <p class="m">Total spent <b>${rm(spent)}</b> across ${bills.length} bill${bills.length === 1 ? '' : 's'}</p>
-    <div class="bar"><button data-a="nb">Add a bill</button><button class="s" data-a="cl">Copy trip link</button></div>
-    <div class="card"><h2>Who is in this trip</h2><div class="chips">${trip.members.map(m => `<span class="chip">${esc(m)}</span>`).join('') || '<span class="m">Add everyone once; every bill reuses these names.</span>'}</div><div class="bar"><button class="s" data-a="am">Add a person</button></div></div>
-    <div class="card"><h2>Bills</h2>${bills.sort((a, b) => b.created - a.created).map(b => `<div class="row"><a class="n" href="#/b/${esc(b._id)}">${esc(b.name)}</a><span class="m">${esc(b.payer ? 'paid by ' + b.payer : 'no payer yet')}</span><span class="amt">${rm(calc(b).total)}</span></div>`).join('') || '<p class="m">No bills yet.</p>'}</div>
-    <div class="card"><h2>Balances</h2>${Object.keys(bal).length ? Object.entries(bal).map(([n, v]) => `<div class="row"><span class="n">${esc(n)}</span><span class="amt ${v > 0.005 ? 'pos' : v < -0.005 ? 'neg' : ''}">${v > 0.005 ? 'is owed ' + rm(v) : v < -0.005 ? 'owes ' + rm(-v) : 'settled'}</span></div>`).join('') : '<p class="m">Balances appear once bills have payers and claimed items.</p>'}</div>
-    <div class="card"><h2>Settle up</h2>${sg.map(s => `<div class="row"><span class="n">${esc(s.from)} pays ${esc(s.to)}</span><span class="amt">${rm(s.amt)}</span><button class="s" data-a="st" data-f="${esc(s.from)}" data-t="${esc(s.to)}" data-v="${s.amt}">Mark paid</button></div>`).join('') || '<p class="m">Everyone is square.</p>'}
-    ${(trip.settlements || []).length ? '<p class="m">Recorded payments</p>' + trip.settlements.map((s, i) => `<div class="row"><span class="n m">${esc(s.from)} paid ${esc(s.to)} ${rm(s.amt)}</span><button class="x" data-a="us" data-i="${i}">Undo</button></div>`).join('') : ''}</div>`;
+    const spent = bills.reduce((s, b) => s + calc(b).total, 0), mb = me ? (bal[me] || 0) : 0;
+    const line = !me ? 'Pick your name to see your balance' : mb > 0.005 ? 'You are owed ' + rm(mb) : mb < -0.005 ? 'You owe ' + rm(-mb) : 'You are all settled up';
+    const chips = cls => trip.members.map(m => `<button class="chip ${m === me ? 'on' : ''}" data-a="me" data-n="${esc(m)}">${esc(m)}</button>`).join('');
+    const meCard = !me && trip.members.length ? `<div class="card"><h2>Who are you?</h2><div class="chips">${chips()}</div></div>` : '';
+    let body = '';
+    if (tab === 'x') {
+      body = [...bills].sort((a, b) => b.created - a.created).map(b => {
+        const c = calc(b), d = new Date(b.created);
+        let st = '<span class="m">no payer yet</span>';
+        if (me && b.payer) {
+          if (b.payer === me) { const lent = Object.entries(c.per).reduce((s, [n, v]) => n === me ? s : s + v, 0); st = lent > 0.005 ? `<span class="pos">you lent<b>${rm(lent)}</b></span>` : '<span class="m">not involved</span>'; }
+          else if (c.per[me]) st = `<span class="neg">you borrowed<b>${rm(c.per[me])}</b></span>`;
+          else st = '<span class="m">not involved</span>';
+        }
+        return `<a class="row ex" href="#/b/${esc(b._id)}"><span class="dt">${mon[d.getMonth()]}<br><b>${d.getDate()}</b></span><span class="n"><b>${esc(b.name)}</b><br><span class="m">${b.payer ? esc(b.payer === me ? 'You' : b.payer) + ' paid ' + rm(c.total) : rm(c.total)}</span></span><span class="st">${st}</span></a>`;
+      }).join('') || '<p class="m">No expenses yet. Tap Add expense to record the first one.</p>';
+      body = `<div class="card">${body}</div>`;
+    } else if (tab === 'b') {
+      body = `<div class="card"><h2>Balances</h2>${trip.members.map(n => { const v = bal[n] || 0; return `<div class="row"><span class="n">${esc(n)}</span><span class="amt ${v > 0.005 ? 'pos' : v < -0.005 ? 'neg' : ''}">${v > 0.005 ? 'gets back ' + rm(v) : v < -0.005 ? 'owes ' + rm(-v) : 'settled up'}</span></div>`; }).join('') || '<p class="m">Add people in the Members tab first.</p>'}</div>
+      <div class="card"><h2>Settle up</h2>${sg.map(s => `<div class="row"><span class="n">${esc(s.from)} pays ${esc(s.to)}</span><span class="amt">${rm(s.amt)}</span><button data-a="st" data-f="${esc(s.from)}" data-t="${esc(s.to)}" data-v="${s.amt}">Settle up</button></div>`).join('') || '<p class="m">Everyone is settled up.</p>'}
+      ${(trip.settlements || []).length ? '<p class="m">Recorded payments</p>' + trip.settlements.map((s, i) => `<div class="row"><span class="n m">${esc(s.from)} paid ${esc(s.to)} ${rm(s.amt)}</span><button class="x" data-a="us" data-i="${i}">Undo</button></div>`).join('') : ''}</div>`;
+    } else {
+      body = `<div class="card"><h2>Members</h2><div class="chips">${trip.members.map(m => `<span class="chip">${esc(m)}</span>`).join('') || '<span class="m">Add everyone once; every expense reuses these names.</span>'}</div><div class="bar"><button class="s" data-a="am">Add a person</button></div></div>
+      ${me || !trip.members.length ? `<div class="card"><h2>Who are you?</h2><div class="chips">${chips()}</div></div>` : ''}
+      <div class="card"><h2>Group total</h2><div class="big">${rm(spent)}</div><p class="m">across ${bills.length} expense${bills.length === 1 ? '' : 's'}</p><div class="bar"><button class="s" data-a="cl">Copy group link</button></div></div>`;
+    }
+    const seg = (v, t) => `<button class="${tab === v ? 'on' : ''}" data-a="tab" data-v="${v}">${t}</button>`;
+    app.innerHTML = `<div class="hd"><a href="#/">‹ Groups</a><h1>${esc(trip.name)}</h1><p class="m">${line}</p></div>${tab === 'x' ? meCard : ''}
+    <div class="seg">${seg('x', 'Expenses')}${seg('b', 'Balances')}${seg('m', 'Members')}</div>${body}
+    <button class="fab" data-a="nb">+ Add expense</button>`;
   };
   sub(ref, d => { trip = d.exists ? d.data() : false; if (trip) addHist('t', id, trip.name); draw(); });
   sub(db.collection('bills').where('tripId', '==', id), q => { bills = q.docs.map(d => ({ ...d.data(), _id: d.id })); draw(); });
   on({
+    tab: el => { tab = el.dataset.v; draw(); },
+    me: el => { ls.set('me_' + id, el.dataset.n); draw(); },
     nb: () => newBill(id),
     cl: el => copy(link('t', id), el),
     am: () => { const n = (prompt('Name') || '').trim(); if (n) ref.update({ members: FV.arrayUnion(n) }); },
@@ -231,17 +268,18 @@ function viewBill(id) {
     const sum = Object.entries(c.per);
     const opts = pick ? (pick.kind === 'parts' ? pool() : P) : [];
     const title = pick ? (pick.kind === 'parts' ? "Who's in this bill?" : pick.kind === 'item' ? 'Whose item is ' + esc((bill.items[pick.k] || {}).name) + '?' : 'Whose item is this?') : '';
-    const panel = pick ? `<div class="card"><div class="row"><h2>${title}</h2><button class="s" data-a="pa">${opts.every(o => pick.sel.includes(o)) ? 'Clear all' : 'Select all'}</button></div>
+    const panelHtml = pick ? `<div class="dd"><div class="row"><h2>${title}</h2><button class="s" data-a="pa">${opts.every(o => pick.sel.includes(o)) ? 'Clear all' : 'Select all'}</button></div>
       ${opts.map(o => `<div class="row item" tabindex="0" role="checkbox" aria-checked="${pick.sel.includes(o)}" data-a="pt" data-n="${esc(o)}"><span class="n">${esc(o)}</span>${pick.pct && pick.sel.includes(o) ? `<input type="number" inputmode="decimal" min="0" step="0.01" style="width:84px" data-a="pv" data-n="${esc(o)}" value="${pick.pct[o] ?? ''}" aria-label="Percent for ${esc(o)}"><span>%</span>` : ''}<b>${pick.sel.includes(o) ? '✓' : ''}</b></div>`).join('') || '<p class="m">No people yet. Ask the organizer to add you to the trip.</p>'}
       ${pick.kind === 'item' && pick.sel.length > 1 ? `<div class="bar"><button class="s" data-a="pm">${pick.pct ? 'Split evenly' : 'Split by %'}</button>${pick.pct ? `<span class="tag">Total ${Math.round(pick.sel.reduce((a, n) => a + (pick.pct[n] || 0), 0) * 100) / 100}%, need 100%</span>` : ''}</div>` : ''}
       <div class="bar"><button data-a="pd">Done</button><button class="s" data-a="pc">Cancel</button></div></div>` : '';
-    app.innerHTML = `<a href="${bill.tripId ? '#/t/' + esc(bill.tripId) : '#/'}">${bill.tripId ? 'Back to trip' : 'All bills'}</a><h1>${esc(bill.name)} ${locked ? '<span class="tag">Locked</span>' : ''}</h1>
-    <div class="bar"><button class="s" data-a="cl">Copy link to share</button></div>${panel}
-    <div class="card"><h2>Who's in this bill?</h2><div class="chips">${P.map(m => `<span class="chip">${esc(m)}</span>`).join('') || '<span class="m">Nobody yet.</span>'}</div><div class="bar"><button class="s" data-a="pp" ${locked ? 'disabled' : ''}>${P.length} of ${pool().length} people</button></div></div>
+    const dd = (kind, k) => pick && pick.kind === kind && (kind !== 'item' || pick.k === k) ? panelHtml : '';
+    app.innerHTML = `<div class="hd"><a href="${bill.tripId ? '#/t/' + esc(bill.tripId) : '#/'}">‹ ${bill.tripId ? 'Group' : 'Groups'}</a><h1>${esc(bill.name)} ${locked ? '<span class="tag">Locked</span>' : ''}</h1><p class="m">${rm(c.total)} total${bill.payer ? ', paid by ' + esc(bill.payer) : ''}</p></div>
+    <div class="bar"><button class="s" data-a="cl">Copy link to share</button></div>
+    <div class="card"><h2>Who's in this bill?</h2><div class="chips">${P.map(m => `<span class="chip">${esc(m)}</span>`).join('') || '<span class="m">Nobody yet.</span>'}</div><div class="bar"><button class="s" data-a="pp" ${locked ? 'disabled' : ''}>${P.length} of ${pool().length} people</button></div>${dd('parts')}</div>
     <div class="card"><h2>Who are you?</h2><div class="chips">${P.map(m => `<button class="chip ${m === me ? 'on' : ''}" data-a="me" data-n="${esc(m)}">${esc(m)}</button>`).join('')}</div><p class="m">Not listed? Ask the organizer to add you.</p></div>
-    <div class="card"><h2>Items</h2><p class="m">${eq || cm ? 'This bill is split ' + (eq ? 'equally' : 'by custom amounts') + ', so claims are ignored.' : 'Tap an item to change who it belongs to, or press Me too for yourself.'}</p>
-    ${items.map(([k, i]) => { const cl = i.claims || []; return `<div class="row item ${cl.includes(me) ? 'mine' : ''}" tabindex="0" role="button" data-a="ei" data-k="${k}"><span class="n">${esc(i.name)}<br><span class="m">${esc(cl.map(n => splitOK(i) ? n + ' ' + i.split[n] + '%' : n).join(', '))}</span>${cl.length ? '' : '<span class="tag">unclaimed</span>'}</span><span class="amt">${rm(i.price)}</span>${locked ? '' : `<button class="s" data-a="cl2" data-k="${k}">${cl.includes(me) ? 'Not me' : 'Me too'}</button><button class="x" data-a="di" data-k="${k}" aria-label="Delete item">✕</button>`}</div>`; }).join('') || '<p class="m">No items yet.</p>'}
-    ${locked ? '' : `<div class="f"><input id="in" placeholder="Item name" aria-label="Item name" value="${esc(keep.n)}"><input id="ip" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Price" aria-label="Price" value="${esc(keep.p)}"></div><div class="f"><button class="s" data-a="no">${newOwn.length ? newOwn.length + ' owner' + (newOwn.length > 1 ? 's' : '') : 'Whose item?'}</button><button data-a="ai">Add item</button></div>`}</div>
+    <div class="card"><h2>Items</h2><p class="m">${eq || cm ? 'This bill is split ' + (eq ? 'equally' : 'by custom amounts') + ', so claims are ignored.' : 'Tap an item to choose who it belongs to.'}</p>
+    ${items.map(([k, i]) => { const cl = i.claims || []; return `<div class="row item ${cl.includes(me) ? 'mine' : ''}" tabindex="0" role="button" data-a="ei" data-k="${k}"><span class="n">${esc(i.name)}<br><span class="m">${esc(cl.map(n => splitOK(i) ? n + ' ' + i.split[n] + '%' : n).join(', '))}</span>${cl.length ? '' : '<span class="tag">unclaimed</span>'}</span><span class="amt">${rm(i.price)}</span>${locked ? '' : `<button class="x" data-a="di" data-k="${k}" aria-label="Delete item">✕</button>`}</div>${dd('item', k)}`; }).join('') || '<p class="m">No items yet.</p>'}
+    ${locked ? '' : `<div class="f"><input id="in" placeholder="Item name" aria-label="Item name" value="${esc(keep.n)}"><input id="ip" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Price" aria-label="Price" value="${esc(keep.p)}"></div><div class="f"><button class="s" data-a="no">${newOwn.length ? newOwn.length + ' owner' + (newOwn.length > 1 ? 's' : '') : 'Whose item?'}</button><button data-a="ai">Add item</button></div>${dd('new')}`}</div>
     <div class="card"><h2>Charges and payer</h2>
     <div class="row"><span class="n">Split method</span><select data-a="sm" ${locked ? 'disabled' : ''}><option value="items" ${eq || cm ? '' : 'selected'}>By items</option><option value="equal" ${eq ? 'selected' : ''}>Equally</option><option value="custom" ${cm ? 'selected' : ''}>Custom % / RM</option></select></div>
     <div class="row"><span class="n">Service charge</span><span class="amt">${bill.svc}%</span><button class="s" data-a="sv" ${locked ? 'disabled' : ''}>Edit</button></div>
