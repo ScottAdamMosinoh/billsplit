@@ -47,6 +47,7 @@ a.ex,.row.ex{color:var(--ink);text-decoration:none;font-weight:400}a.n.ex{displa
 .dt{width:34px;text-align:center;font-size:.75rem;color:var(--mute);line-height:1.15;flex:none}.dt b{font-size:1.05rem;color:var(--ink)}
 .st{text-align:right;font-size:.8rem;white-space:nowrap}.st b{display:block;font-size:1rem}
 .dd{background:var(--bg);border-radius:6px;padding:4px 12px 10px;margin:6px 0 10px;box-shadow:inset 0 0 0 1.5px var(--line);max-height:60vh;overflow:auto}.dd .row{padding:8px 0}
+.w{width:100%;margin:6px 0}
 </style>
 </head>
 <body>
@@ -78,12 +79,21 @@ function addHist(t, id, name) {
   ls.set('hist', h.slice(0, 200));
 }
 
+const CURS = ['MYR', 'SGD', 'USD', 'EUR', 'GBP', 'JPY', 'THB', 'IDR', 'AUD', 'CNY', 'KRW', 'INR'];
+const fmt = (n, c) => (c || 'MYR') + ' ' + (Math.round(n * 100) / 100).toFixed(2);
 // ---------- maths ----------
 function splitOK(i) {
   const c = i.claims || [], x = i.split;
   return !!x && c.length > 1 && Object.keys(x).length === c.length && c.every(n => n in x) && Math.abs(c.reduce((a, n) => a + x[n], 0) - 100) < 0.01;
 }
 function calc(b) {
+  if (b.mode === 'whole') {
+    const T = +b.amount || 0, per = {}, names = {};
+    if (b.how === 'pct') Object.entries(b.pct || {}).forEach(([n, v]) => { if (v) { per[n] = T * v / 100; names[n] = [v + '%']; } });
+    else if (b.how === 'amt') Object.entries(b.amt || {}).forEach(([n, v]) => { if (v) { per[n] = +v; names[n] = ['fixed amount']; } });
+    else { const E = b.even || []; E.forEach(n => { per[n] = T / E.length; names[n] = ['equal share']; }); }
+    return { per, names, total: T, unclaimed: 0, custom: null };
+  }
   const items = Object.values(b.items || {});
   const f = (1 + (b.svc || 0) / 100) * (1 + (b.tax || 0) / 100);
   const per = {}, names = {};
@@ -118,13 +128,13 @@ function calc(b) {
   }
   return { per, names, total: sub * f, unclaimed, custom };
 }
-function balances(bills, sets) {
+function balances(bills, sets, cur) {
   const bal = {}, add = (n, v) => bal[n] = (bal[n] || 0) + v;
   bills.forEach(b => {
-    if (!b.payer) return;
+    if (!b.payer || (b.currency || 'MYR') !== cur) return;
     Object.entries(calc(b).per).forEach(([n, v]) => { if (n !== b.payer) { add(n, -v); add(b.payer, v); } });
   });
-  (sets || []).forEach(s => { add(s.from, s.amt); add(s.to, -s.amt); });
+  (sets || []).filter(s => (s.cur || 'MYR') === cur).forEach(s => { add(s.from, s.amt); add(s.to, -s.amt); });
   return bal;
 }
 function suggest(bal) {
@@ -181,7 +191,8 @@ function route() {
   app.onclick = app.onchange = null;
   const [, t, id] = location.hash.split('/');
   if (t === 't' && id) viewTrip(id);
-  else if (t === 'b' && id) viewBill(id);
+  else if (t === 'b' && id) viewExpense(id, null);
+  else if (t === 'n' && id) viewExpense(null, id === '-' ? null : id);
   else viewHome();
   window.scrollTo(0, 0);
 }
@@ -208,7 +219,7 @@ function viewHome() {
   }).catch(() => {}));
   on({
     nt: () => { const n = prompt('Group name (e.g. Langkawi 2026)'); if (!n) return; const id = rid(); db.collection('trips').doc(id).set({ name: n.trim(), members: [], settlements: [], created: Date.now() }).then(() => go('/t/' + id)); },
-    nb: () => newBill(null),
+    nb: () => go('/n/-'),
     rm: el => { ls.set('hist', ls.get('hist', []).filter(x => x.id !== el.dataset.id)); viewHome(); },
     bk: el => copy(ls.get('hist', []).map(x => x.name + ': ' + link(x.t, x.id)).join('\n'), el)
   });
@@ -231,34 +242,39 @@ function viewTrip(id) {
   const draw = () => {
     if (trip === null) { app.innerHTML = '<p class="m" style="padding:16px">Loading...</p>'; return; }
     if (trip === false) { app.innerHTML = '<div class="card"><b>Group not found.</b> <a href="#/">Back</a></div>'; return; }
-    bills.forEach(b => { b.parts = b.parts || trip.members; });
     const saved = ls.get('me_' + id, ''), me = trip.members.includes(saved) ? saved : '';
-    const bal = balances(bills, trip.settlements), sg = suggest(bal);
-    const spent = bills.reduce((s, b) => s + calc(b).total, 0), mb = me ? (bal[me] || 0) : 0;
-    const line = !me ? 'Pick your name to see your balance' : mb > 0.005 ? 'You are owed ' + rm(mb) : mb < -0.005 ? 'You owe ' + rm(-mb) : 'You are all settled up';
-    const chips = cls => trip.members.map(m => `<button class="chip ${m === me ? 'on' : ''}" data-a="me" data-n="${esc(m)}">${esc(m)}</button>`).join('');
+    const sets = trip.settlements || [];
+    const curs = [...new Set([...bills.map(b => b.currency || 'MYR'), ...sets.map(s => s.cur || 'MYR')])];
+    if (!curs.length) curs.push('MYR');
+    const bals = curs.map(c => [c, balances(bills, sets, c)]);
+    const line = !me ? 'Pick your name to see your balance' : (() => {
+      const a = bals.map(([c, bal]) => { const v = bal[me] || 0; return v > 0.005 ? 'You are owed ' + fmt(v, c) : v < -0.005 ? 'You owe ' + fmt(-v, c) : ''; }).filter(Boolean);
+      return a.length ? a.join('. ') : 'You are all settled up';
+    })();
+    const chips = () => trip.members.map(m => `<button class="chip ${m === me ? 'on' : ''}" data-a="me" data-n="${esc(m)}">${esc(m)}</button>`).join('');
     const meCard = !me && trip.members.length ? `<div class="card"><h2>Who are you?</h2><div class="chips">${chips()}</div></div>` : '';
     let body = '';
     if (tab === 'x') {
       body = [...bills].sort((a, b) => b.created - a.created).map(b => {
-        const c = calc(b), d = new Date(b.created);
+        const c = calc(b), d = new Date(b.created), cu = b.currency || 'MYR';
         let st = '<span class="m">no payer yet</span>';
         if (me && b.payer) {
-          if (b.payer === me) { const lent = Object.entries(c.per).reduce((s, [n, v]) => n === me ? s : s + v, 0); st = lent > 0.005 ? `<span class="pos">you lent<b>${rm(lent)}</b></span>` : '<span class="m">not involved</span>'; }
-          else if (c.per[me]) st = `<span class="neg">you borrowed<b>${rm(c.per[me])}</b></span>`;
+          if (b.payer === me) { const lent = Object.entries(c.per).reduce((s, [n, v]) => n === me ? s : s + v, 0); st = lent > 0.005 ? `<span class="pos">you lent<b>${fmt(lent, cu)}</b></span>` : '<span class="m">not involved</span>'; }
+          else if (c.per[me]) st = `<span class="neg">you borrowed<b>${fmt(c.per[me], cu)}</b></span>`;
           else st = '<span class="m">not involved</span>';
         }
-        return `<a class="row ex" href="#/b/${esc(b._id)}"><span class="dt">${mon[d.getMonth()]}<br><b>${d.getDate()}</b></span><span class="n"><b>${esc(b.name)}</b><br><span class="m">${b.payer ? esc(b.payer === me ? 'You' : b.payer) + ' paid ' + rm(c.total) : rm(c.total)}</span></span><span class="st">${st}</span></a>`;
+        return `<a class="row ex" href="#/b/${esc(b._id)}"><span class="dt">${mon[d.getMonth()]}<br><b>${d.getDate()}</b></span><span class="n"><b>${esc(b.name)}</b><br><span class="m">${b.payer ? esc(b.payer === me ? 'You' : b.payer) + ' paid ' + fmt(c.total, cu) : fmt(c.total, cu)}</span></span><span class="st">${st}</span></a>`;
       }).join('') || '<p class="m">No expenses yet. Tap Add expense to record the first one.</p>';
       body = `<div class="card">${body}</div>`;
     } else if (tab === 'b') {
-      body = `<div class="card"><h2>Balances</h2>${trip.members.map(n => { const v = bal[n] || 0; return `<div class="row"><span class="n">${esc(n)}</span><span class="amt ${v > 0.005 ? 'pos' : v < -0.005 ? 'neg' : ''}">${v > 0.005 ? 'gets back ' + rm(v) : v < -0.005 ? 'owes ' + rm(-v) : 'settled up'}</span></div>`; }).join('') || '<p class="m">Add people in the Members tab first.</p>'}</div>
-      <div class="card"><h2>Settle up</h2>${sg.map(s => `<div class="row"><span class="n">${esc(s.from)} pays ${esc(s.to)}</span><span class="amt">${rm(s.amt)}</span><button data-a="st" data-f="${esc(s.from)}" data-t="${esc(s.to)}" data-v="${s.amt}">Settle up</button></div>`).join('') || '<p class="m">Everyone is settled up.</p>'}
-      ${(trip.settlements || []).length ? '<p class="m">Recorded payments</p>' + trip.settlements.map((s, i) => `<div class="row"><span class="n m">${esc(s.from)} paid ${esc(s.to)} ${rm(s.amt)}</span><button class="x" data-a="us" data-i="${i}">Undo</button></div>`).join('') : ''}</div>`;
+      body = bals.map(([c, bal]) => `<div class="card"><h2>Balances (${c})</h2>${trip.members.map(n => { const v = bal[n] || 0; return `<div class="row"><span class="n">${esc(n)}</span><span class="amt ${v > 0.005 ? 'pos' : v < -0.005 ? 'neg' : ''}">${v > 0.005 ? 'gets back ' + fmt(v, c) : v < -0.005 ? 'owes ' + fmt(-v, c) : 'settled up'}</span></div>`; }).join('') || '<p class="m">Add people in the Members tab first.</p>'}</div>
+      <div class="card"><h2>Settle up (${c})</h2>${suggest(bal).map(s => `<div class="row"><span class="n">${esc(s.from)} pays ${esc(s.to)}</span><span class="amt">${fmt(s.amt, c)}</span><button data-a="st" data-f="${esc(s.from)}" data-t="${esc(s.to)}" data-v="${s.amt}" data-c="${c}">Settle up</button></div>`).join('') || '<p class="m">Everyone is settled up.</p>'}</div>`).join('')
+      + (sets.length ? '<div class="card"><h2>Recorded payments</h2>' + sets.map((s, i) => `<div class="row"><span class="n m">${esc(s.from)} paid ${esc(s.to)} ${fmt(s.amt, s.cur)}</span><button class="x" data-a="us" data-i="${i}">Undo</button></div>`).join('') + '</div>' : '');
     } else {
+      const spent = curs.map(c => fmt(bills.filter(b => (b.currency || 'MYR') === c).reduce((s, b) => s + calc(b).total, 0), c)).join(', ');
       body = `<div class="card"><h2>Members</h2><div class="chips">${trip.members.map(m => `<span class="chip">${esc(m)}</span>`).join('') || '<span class="m">Add everyone once; every expense reuses these names.</span>'}</div><div class="bar"><button class="s" data-a="am">Add a person</button></div></div>
       ${me || !trip.members.length ? `<div class="card"><h2>Who are you?</h2><div class="chips">${chips()}</div></div>` : ''}
-      <div class="card"><h2>Group total</h2><div class="big">${rm(spent)}</div><p class="m">across ${bills.length} expense${bills.length === 1 ? '' : 's'}</p><div class="bar"><button class="s" data-a="cl">Copy group link</button></div></div>`;
+      <div class="card"><h2>Group total</h2><div class="big">${spent}</div><p class="m">across ${bills.length} expense${bills.length === 1 ? '' : 's'}</p><div class="bar"><button class="s" data-a="cl">Copy group link</button></div></div>`;
     }
     const seg = (v, t) => `<button class="${tab === v ? 'on' : ''}" data-a="tab" data-v="${v}">${t}</button>`;
     app.innerHTML = `<div class="hd"><a href="#/">‹ Groups</a><h1>${esc(trip.name)}</h1><p class="m">${line}</p></div>${tab === 'x' ? meCard : ''}
@@ -270,160 +286,143 @@ function viewTrip(id) {
   on({
     tab: el => { tab = el.dataset.v; draw(); },
     me: el => { ls.set('me_' + id, el.dataset.n); draw(); },
-    nb: () => newBill(id),
+    nb: () => go('/n/' + id),
     cl: el => copy(link('t', id), el),
     am: () => { const n = (prompt('Name') || '').trim(); if (n) ref.update({ members: FV.arrayUnion(n) }); },
-    st: el => { if (confirm(el.dataset.f + ' paid ' + el.dataset.t + ' ' + rm(+el.dataset.v) + '?')) ref.update({ settlements: FV.arrayUnion({ from: el.dataset.f, to: el.dataset.t, amt: +el.dataset.v, t: Date.now() }) }); },
-    us: el => { const s = trip.settlements[+el.dataset.i]; if (s && confirm('Undo this payment?')) ref.update({ settlements: FV.arrayRemove(s) }); }
+    st: el => { if (confirm(el.dataset.f + ' paid ' + el.dataset.t + ' ' + fmt(+el.dataset.v, el.dataset.c) + '?')) ref.update({ settlements: FV.arrayUnion({ from: el.dataset.f, to: el.dataset.t, amt: +el.dataset.v, cur: el.dataset.c, t: Date.now() }) }); },
+    us: el => { const s = (trip.settlements || [])[+el.dataset.i]; if (s && confirm('Undo this payment?')) ref.update({ settlements: FV.arrayRemove(s) }); }
   });
 }
 
-// ---------- bill ----------
-function viewBill(id) {
-  let bill = null, trip = null, tripSub = false, pick = null, newOwn = [], keep = { n: '', p: '' }, scan = null;
-  const ref = db.collection('bills').doc(id);
-  const pool = () => bill.tripId ? (trip ? trip.members : []) : (bill.members || []);
-  const parts = () => bill.parts || pool();
-  const cur = () => ({ ...bill, parts: parts() });
-  const meKey = () => 'me_' + (bill.tripId || id);
-  const draw = () => {
-    if (bill === null) { app.innerHTML = '<p class="m">Loading...</p>'; return; }
-    if (bill === false) { app.innerHTML = '<div class="card"><b>Bill not found.</b> <a href="#/">Back</a></div>'; return; }
-    syncScan();
-    const iv = document.getElementById('in'), pv = document.getElementById('ip');
-    if (iv) keep = { n: iv.value, p: pv.value };
-    const P = parts(), saved = ls.get(meKey(), ''), me = P.includes(saved) ? saved : '';
-    const c = calc(cur()), locked = bill.locked, eq = bill.splitMode === 'equal', cm = bill.splitMode === 'custom';
-    const sp = bill.split || {}, cu = c.custom;
-    const msg = !cu ? '' : cu.ok ? 'Adds up to the bill' : cu.rest < -0.005 ? 'Fixed amounts exceed the bill by ' + rm(-cu.rest) : cu.hasPct ? 'Percentages total ' + (Math.round(cu.pct * 100) / 100) + '%, need 100%' : rm(cu.rest) + ' still unassigned';
-    const cust = cm ? `<div class="card"><h2>Custom split</h2><p class="m">Set a percentage or a fixed RM amount for each person. Fixed amounts come off the bill total first, and percentages share the rest and must reach 100%.</p>${P.map(n => { const x = sp[n] || { t: 'pct', v: 0 }; return `<div class="row"><span class="n">${esc(n)}</span><input type="number" inputmode="decimal" min="0" step="0.01" style="width:96px" value="${x.v || ''}" data-a="cv" data-n="${esc(n)}" aria-label="Value for ${esc(n)}" ${locked ? 'disabled' : ''}><button class="s" data-a="ct" data-n="${esc(n)}" ${locked ? 'disabled' : ''} aria-label="Switch between percent and RM">${x.t === 'amt' ? 'RM' : '%'}</button></div>`; }).join('')}<p><span class="tag">${msg}</span></p></div>` : '';
-    const items = Object.entries(bill.items || {}).sort((a, b) => a[1].o - b[1].o);
-    const sum = Object.entries(c.per);
-    const opts = pick ? (pick.kind === 'parts' ? pool() : P) : [];
-    const title = pick ? (pick.kind === 'parts' ? "Who's in this bill?" : pick.kind === 'item' ? 'Whose item is ' + esc((bill.items[pick.k] || {}).name) + '?' : 'Whose item is this?') : '';
-    const panelHtml = pick ? `<div class="dd"><div class="row"><h2>${title}</h2><button class="s" data-a="pa">${opts.every(o => pick.sel.includes(o)) ? 'Clear all' : 'Select all'}</button></div>
-      ${opts.map(o => `<div class="row item" tabindex="0" role="checkbox" aria-checked="${pick.sel.includes(o)}" data-a="pt" data-n="${esc(o)}"><span class="n">${esc(o)}</span>${pick.pct && pick.sel.includes(o) ? `<input type="number" inputmode="decimal" min="0" step="0.01" style="width:84px" data-a="pv" data-n="${esc(o)}" value="${pick.pct[o] ?? ''}" aria-label="Percent for ${esc(o)}"><span>%</span>` : ''}<b>${pick.sel.includes(o) ? '✓' : ''}</b></div>`).join('') || '<p class="m">No people yet. Ask the organizer to add you to the trip.</p>'}
-      ${pick.kind === 'item' && pick.sel.length > 1 ? `<div class="bar"><button class="s" data-a="pm">${pick.pct ? 'Split evenly' : 'Split by %'}</button>${pick.pct ? `<span class="tag">Total ${Math.round(pick.sel.reduce((a, n) => a + (pick.pct[n] || 0), 0) * 100) / 100}%, need 100%</span>` : ''}</div>` : ''}
-      <div class="bar"><button data-a="pd">Done</button><button class="s" data-a="pc">Cancel</button></div></div>` : '';
-    const scanUI = scan ? `<div class="dd"><div class="row"><h2>Scanned items</h2><button class="s" data-a="sc">Close</button></div>
-      ${scan.rows ? '<p class="m">Check each line. Fix names or prices and remove anything that is not an item.</p>' + scan.rows.map((r, i) => `<div class="f"><input data-sr="${i}" data-sf="n" value="${esc(r.n)}" aria-label="Item name"><input data-sr="${i}" data-sf="p" type="number" step="0.01" inputmode="decimal" value="${esc(r.p)}" aria-label="Price"><button class="x" data-a="sx" data-i="${i}" aria-label="Remove line">✕</button></div>`).join('') + (scan.rows.length ? `<div class="bar"><button data-a="sa">Add ${scan.rows.length} items</button></div>` : '') : ''}
-      <p class="m" id="scm">${esc(scan.msg || '')}</p></div>` : '';
-    const dd = (kind, k) => pick && pick.kind === kind && (kind !== 'item' || pick.k === k) ? panelHtml : '';
-    app.innerHTML = `<div class="hd"><a href="${bill.tripId ? '#/t/' + esc(bill.tripId) : '#/'}">‹ ${bill.tripId ? 'Group' : 'Groups'}</a><h1>${esc(bill.name)} ${locked ? '<span class="tag">Locked</span>' : ''}</h1><p class="m">${rm(c.total)} total${bill.payer ? ', paid by ' + esc(bill.payer) : ''}</p></div>
-    <div class="bar"><button class="s" data-a="cl">Copy link to share</button></div>
-    <div class="card"><h2>Who's in this bill?</h2><div class="chips">${P.map(m => `<span class="chip">${esc(m)}</span>`).join('') || '<span class="m">Nobody yet.</span>'}</div><div class="bar"><button class="s" data-a="pp" ${locked ? 'disabled' : ''}>${P.length} of ${pool().length} people</button></div>${dd('parts')}</div>
-    <div class="card"><h2>Who are you?</h2><div class="chips">${P.map(m => `<button class="chip ${m === me ? 'on' : ''}" data-a="me" data-n="${esc(m)}">${esc(m)}</button>`).join('')}</div><p class="m">Not listed? Ask the organizer to add you.</p></div>
-    <div class="card"><h2>Items</h2><p class="m">${eq || cm ? 'This bill is split ' + (eq ? 'equally' : 'by custom amounts') + ', so claims are ignored.' : 'Tap an item to choose who it belongs to.'}</p>
-    ${items.map(([k, i]) => { const cl = i.claims || []; return `<div class="row item ${cl.includes(me) ? 'mine' : ''}" tabindex="0" role="button" data-a="ei" data-k="${k}"><span class="n">${esc(i.name)}<br><span class="m">${esc(cl.map(n => splitOK(i) ? n + ' ' + i.split[n] + '%' : n).join(', '))}</span>${cl.length ? '' : '<span class="tag">unclaimed</span>'}</span><span class="amt">${rm(i.price)}</span>${locked ? '' : `<button class="x" data-a="di" data-k="${k}" aria-label="Delete item">✕</button>`}</div>${dd('item', k)}`; }).join('') || '<p class="m">No items yet.</p>'}
-    ${locked ? '' : `<div class="f"><input id="in" placeholder="Item name" aria-label="Item name" value="${esc(keep.n)}"><input id="ip" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Price" aria-label="Price" value="${esc(keep.p)}"></div><div class="f"><button class="s" data-a="no">${newOwn.length ? newOwn.length + ' owner' + (newOwn.length > 1 ? 's' : '') : 'Whose item?'}</button><button data-a="ai">Add item</button></div>${dd('new')}<div class="f"><button class="s" data-a="cam">Scan receipt (camera)</button><button class="s" data-a="gal">From gallery</button></div>${scanUI}`}</div>
-    <div class="card"><h2>Charges and payer</h2>
-    <div class="row"><span class="n">Split method</span><select data-a="sm" ${locked ? 'disabled' : ''}><option value="items" ${eq || cm ? '' : 'selected'}>By items</option><option value="equal" ${eq ? 'selected' : ''}>Equally</option><option value="custom" ${cm ? 'selected' : ''}>Custom % / RM</option></select></div>
-    <div class="row"><span class="n">Service charge</span><span class="amt">${bill.svc}%</span><button class="s" data-a="sv" ${locked ? 'disabled' : ''}>Edit</button></div>
-    <div class="row"><span class="n">SST / tax (on top of service)</span><span class="amt">${bill.tax}%</span><button class="s" data-a="tx" ${locked ? 'disabled' : ''}>Edit</button></div>
-    <div class="row"><span class="n">Paid by</span><select data-a="py" ${locked ? 'disabled' : ''}><option value="">Choose</option>${P.map(m => `<option ${m === bill.payer ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></div></div>
-    ${cust}<div class="card"><h2>Who owes what</h2><div class="big">${rm(c.total)}</div><p class="m">bill total</p>
-    ${c.unclaimed > 0.005 ? `<p><span class="tag">${rm(c.unclaimed)} not claimed yet</span></p>` : ''}
-    ${sum.map(([n, v]) => `<div class="row"><span class="n"><b>${esc(n)}</b><br><span class="m">${esc(c.names[n].join(', '))}</span></span><span class="amt">${rm(v)}</span></div>`).join('') || '<p class="m">Nobody has claimed anything yet.</p>'}
-    <div class="bar"><button data-a="cs">Copy summary for WhatsApp</button></div></div>
-    <div class="bar"><button class="s" data-a="lk">${locked ? 'Unlock bill' : 'Lock bill'}</button><button class="s" data-a="db">Delete bill</button></div>`;
-  };
-  sub(ref, d => {
-    bill = d.exists ? d.data() : false;
-    if (bill) {
-      if (bill.tripId) ls.set('hist', ls.get('hist', []).filter(x => x.id !== id)); else addHist('b', id, bill.name);
-      if (bill.tripId && !tripSub) { tripSub = true; sub(db.collection('trips').doc(bill.tripId), t => { trip = t.exists ? t.data() : null; if (trip) addHist('t', bill.tripId, trip.name); draw(); }); }
+// ---------- expense (add / edit) ----------
+const HEAD = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z"/></svg>';
+const r2 = x => Math.round(x * 100) / 100;
+const sumOf = (o, M) => M.reduce((a, m) => a + (+o[m] || 0), 0);
+async function viewExpense(id, tripId) {
+  let trip = null, d = null, created = Date.now(), ui = { menu: false, who: null }, scanning = '';
+  const members = () => tripId ? (trip ? trip.members : []) : (d.members || []);
+  const back = () => go(tripId ? '/t/' + tripId : '/');
+  const blank = () => ({ name: '', mode: 'whole', cur: 'MYR', amount: '', payer: '', how: 'even', even: [...members()], pct: {}, amt: {}, svc: '', tax: '', items: [{ n: '', p: '', c: [] }] });
+  try {
+    if (id) {
+      const s = await db.collection('bills').doc(id).get();
+      if (!s.exists) { app.innerHTML = '<div class="card"><b>Expense not found.</b> <a href="#/">Back</a></div>'; return; }
+      const b = s.data(); tripId = b.tripId || null; created = b.created || created;
+      if (tripId) trip = (await db.collection('trips').doc(tripId).get()).data();
+      d = { name: b.name, mode: b.mode || 'items', cur: b.currency || 'MYR', amount: b.amount ?? '', payer: b.payer || '', how: b.how || 'even', even: b.even || [...(tripId ? trip.members : b.members || [])], pct: b.pct || {}, amt: b.amt || {}, svc: b.svc || '', tax: b.tax || '', members: b.members || [],
+        items: Object.values(b.items || {}).sort((x, y) => x.o - y.o).map(i => ({ n: i.name, p: i.price, c: [...(i.claims || [])] })) };
+      if (!d.items.length) d.items = [{ n: '', p: '', c: [] }];
+      if (tripId) addHist('t', tripId, trip.name); else addHist('b', id, b.name);
+    } else {
+      if (tripId) { const t = await db.collection('trips').doc(tripId).get(); if (!t.exists) { app.innerHTML = '<div class="card"><b>Group not found.</b> <a href="#/">Back</a></div>'; return; } trip = t.data(); if (!trip.members.length) { alert('Add people to the group first.'); return back(); } d = blank(); }
+      else { const m = [...new Set((prompt('Who is in this expense? Names separated by commas') || '').split(',').map(x => x.trim()).filter(Boolean))]; if (!m.length) return back(); d = { members: m }; d = { ...blank(), members: m }; }
     }
-    draw();
-  });
-  const upd = o => { if (!bill.locked || 'locked' in o) ref.update(o); };
-  const syncScan = () => { if (scan && scan.rows) document.querySelectorAll('input[data-sr]').forEach(e => { const r = scan.rows[+e.dataset.sr]; if (r) r[e.dataset.sf] = e.value; }); };
+  } catch (e) { app.innerHTML = '<div class="card"><b>Could not load.</b><p class="m">' + esc(e.message) + '</p><a href="#/">Back</a></div>'; return; }
+  const hint = () => {
+    const el = document.getElementById('hint'), tt = document.getElementById('tot');
+    if (el) {
+      const M = members();
+      if (d.how === 'pct') { const s = sumOf(d.pct, M); el.textContent = 'Total ' + r2(s) + '% (' + (s <= 100 ? r2(100 - s) + '% left' : r2(s - 100) + '% over') + ')'; }
+      else { const T = parseFloat(d.amount) || 0, s = sumOf(d.amt, M); el.textContent = 'Total ' + fmt(s, d.cur) + ' of ' + fmt(T, d.cur) + ' (' + (s <= T ? fmt(T - s, d.cur) + ' left' : fmt(s - T, d.cur) + ' over') + ')'; }
+    }
+    if (tt) { const f = (1 + (parseFloat(d.svc) || 0) / 100) * (1 + (parseFloat(d.tax) || 0) / 100); tt.textContent = 'Total with fees ' + fmt(d.items.reduce((a, r) => a + (parseFloat(r.p) || 0), 0) * f, d.cur); }
+  };
+  const ticks = (M, sel, act) => M.map(m => `<div class="row item" tabindex="0" role="checkbox" aria-checked="${sel.includes(m)}" data-a="${act}" data-n="${esc(m)}"><span class="n">${esc(m)}</span><b>${sel.includes(m) ? '✓' : ''}</b></div>`).join('');
+  const draw = () => {
+    const M = members(), w = d.mode === 'whole';
+    const tog = (m, t) => `<button class="${d.mode === m ? 'on' : ''}" data-a="mode" data-v="${m}">${t}</button>`;
+    const top = `<div class="row"><div class="seg" style="flex:1;margin:0">${tog('whole', 'Entire bill')}${tog('items', 'By item')}</div><select data-f="cur" aria-label="Currency">${CURS.map(c => `<option ${c === d.cur ? 'selected' : ''}>${c}</option>`).join('')}</select></div>`;
+    const head = `<div class="card"><input class="w" data-f="name" placeholder="Description" aria-label="Description" value="${esc(d.name)}">
+      ${w ? `<input class="w" type="number" inputmode="decimal" step="0.01" min="0" data-f="amount" placeholder="Bill amount (${d.cur})" aria-label="Bill amount" value="${esc(d.amount)}">` : ''}
+      <div class="row"><span class="n">Paid by</span><select data-f="payer"><option value="">Choose</option>${M.map(m => `<option ${m === d.payer ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></div>
+      ${w ? `<div class="row"><span class="n">Split</span><button class="s" data-a="menu">${{ even: 'Evenly (' + d.even.length + ')', pct: 'By percentages', amt: 'Unequally' }[d.how]} ▸</button></div>` : ''}</div>`;
+    let main;
+    if (w) {
+      const tab = (v, t) => `<button class="${d.how === v ? 'on' : ''}" data-a="how" data-v="${v}">${t}</button>`;
+      const body = d.how === 'even'
+        ? `<div class="row"><b>Select people</b><button class="s" data-a="all">${M.every(m => d.even.includes(m)) ? 'Unselect all' : 'Select all'}</button></div>` + ticks(M, d.even, 'ev')
+        : M.map(m => `<div class="row"><span class="n">${esc(m)}</span><input type="number" inputmode="decimal" step="0.01" min="0" style="width:96px" data-f="${d.how}" data-n="${esc(m)}" aria-label="${esc(m)}" value="${d[d.how][m] ?? ''}"><span>${d.how === 'pct' ? '%' : d.cur}</span></div>`).join('') + '<p class="m" id="hint"></p>';
+      main = ui.menu ? `<div class="dd"><div class="seg">${tab('even', 'Evenly')}${tab('pct', 'Percentages')}${tab('amt', 'Unequally')}</div>${body}<div class="bar"><button data-a="menu">Done</button></div></div>` : '';
+    } else {
+      main = `<div class="card"><h2>Fees on the whole bill</h2><div class="f"><input type="number" inputmode="decimal" step="0.01" min="0" data-f="svc" placeholder="Service charge %" aria-label="Service charge percent" value="${esc(d.svc)}"><input type="number" inputmode="decimal" step="0.01" min="0" data-f="tax" placeholder="SST / tax %" aria-label="Tax percent" value="${esc(d.tax)}"></div>
+      <h2 style="margin-top:14px">Items</h2>${d.items.map((it, i) => `<div class="f"><input data-f="in" data-i="${i}" placeholder="Item" aria-label="Item name" value="${esc(it.n)}"><input type="number" inputmode="decimal" step="0.01" min="0" style="width:84px" data-f="ip" data-i="${i}" placeholder="Cost" aria-label="Cost" value="${esc(it.p)}"><button class="s" data-a="who" data-i="${i}" aria-label="Who bought this">${HEAD}${it.c.length ? ' ' + it.c.length : ''}</button><button class="x" data-a="rmv" data-i="${i}" aria-label="Remove row">✕</button></div>
+      ${ui.who === i ? `<div class="dd"><div class="row"><b>Who bought this?</b><button class="s" data-a="wa">${M.every(m => it.c.includes(m)) ? 'Unselect all' : 'Select all'}</button></div>${ticks(M, it.c, 'wt')}<div class="bar"><button data-a="wd">Done</button></div></div>` : ''}`).join('')}
+      <div class="bar"><button class="s" data-a="addrow">+ Add row</button><button class="s" data-a="cam">Scan receipt</button><button class="s" data-a="gal">From gallery</button></div><p class="m" id="scm">${esc(scanning)}</p><p class="m" id="tot"></p></div>`;
+    }
+    app.innerHTML = `<div class="hd"><a href="${tripId ? '#/t/' + esc(tripId) : '#/'}">‹ ${tripId ? 'Group' : 'Groups'}</a><h1>${id ? 'Edit expense' : 'Add expense'}</h1></div>${top}${head}${main}
+    <div class="bar"><button data-a="save">Save expense</button>${id ? '<button class="s" data-a="del">Delete</button>' : ''}</div>`;
+    hint();
+  };
+  const save = async () => {
+    const name = d.name.trim(), M = members();
+    if (!name) return alert('Enter a description.');
+    if (!d.payer) return alert('Choose who paid.');
+    const o = { name, tripId: tripId || null, currency: d.cur, mode: d.mode, payer: d.payer, created, items: {}, svc: 0, tax: 0 };
+    if (!tripId) o.members = M;
+    if (d.mode === 'whole') {
+      const T = parseFloat(d.amount);
+      if (!(T > 0)) return alert('Enter the bill amount.');
+      if (d.how === 'even' && !d.even.length) return alert('Select at least one person.');
+      if (d.how === 'pct') { const s = sumOf(d.pct, M); if (Math.abs(s - 100) > 0.01) return alert(s < 100 ? r2(100 - s) + '% left to reach 100%.' : r2(s - 100) + '% over 100%.'); }
+      if (d.how === 'amt') { const s = sumOf(d.amt, M); if (Math.abs(s - T) > 0.01) return alert(s < T ? fmt(T - s, d.cur) + ' left to reach the full bill amount.' : fmt(s - T, d.cur) + ' over the bill amount.'); }
+      Object.assign(o, { amount: T, how: d.how, even: d.even, pct: d.pct, amt: d.amt });
+    } else {
+      const rows = d.items.filter(r => r.n.trim() && parseFloat(r.p) >= 0);
+      if (!rows.length) return alert('Add at least one item with a name and cost.');
+      if (rows.some(r => !r.c.length) && !confirm('Some items have nobody assigned and will not be split. Save anyway?')) return;
+      rows.forEach((r, i) => { o.items[rid()] = { name: r.n.trim(), price: parseFloat(r.p), claims: r.c, o: i }; });
+      o.svc = parseFloat(d.svc) || 0; o.tax = parseFloat(d.tax) || 0;
+    }
+    try {
+      const nid = id || rid();
+      await db.collection('bills').doc(nid).set(o);
+      if (!tripId) addHist('b', nid, name);
+      back();
+    } catch (e) { alert('Could not save: ' + e.message); }
+  };
   const scanFile = async f => {
-    if (bill.locked) return;
-    scan = { msg: 'Preparing photo...', rows: null }; draw();
+    scanning = 'Preparing photo...'; draw();
     try {
       const [T, cv] = await Promise.all([loadTess(), prepPhoto(f)]);
       const r = await T.recognize(cv, 'eng', { logger: m => { if (m.status === 'recognizing text' && scanHook === scanFile) { const e = document.getElementById('scm'); if (e) e.textContent = 'Reading receipt ' + Math.round(m.progress * 100) + '%'; } } });
       if (scanHook !== scanFile) return;
       const rows = parseReceipt(r.data.text);
-      scan = { msg: rows.length ? '' : 'No items found. Try a flatter, brighter photo, or add items by hand.', rows };
-    } catch (e) { if (scanHook !== scanFile) return; scan = { msg: 'Scan failed: ' + e.message, rows: null }; }
+      d.items = d.items.filter(x => x.n || x.p).concat(rows.map(x => ({ n: x.n, p: x.p, c: [] })));
+      if (!d.items.length) d.items = [{ n: '', p: '', c: [] }];
+      scanning = rows.length ? rows.length + ' items added. Check names and prices below.' : 'No items found. Try a flatter, brighter photo, or add items by hand.';
+    } catch (e) { if (scanHook !== scanFile) return; scanning = 'Scan failed: ' + e.message; }
     draw();
   };
   scanHook = scanFile;
-  const num = (q, v) => { const x = parseFloat(prompt(q, v)); return isNaN(x) || x < 0 ? null : x; };
+  const tg = (arr, n) => { const i = arr.indexOf(n); if (i < 0) arr.push(n); else arr.splice(i, 1); };
+  draw();
   on({
+    mode: el => { d.mode = el.dataset.v; ui = { menu: false, who: null }; draw(); },
+    menu: () => { ui.menu = !ui.menu; draw(); },
+    how: el => { d.how = el.dataset.v; draw(); },
+    all: () => { const M = members(); d.even = M.every(m => d.even.includes(m)) ? [] : [...M]; draw(); },
+    ev: el => { tg(d.even, el.dataset.n); draw(); },
+    who: el => { const i = +el.dataset.i; ui.who = ui.who === i ? null : i; draw(); },
+    wt: el => { tg(d.items[ui.who].c, el.dataset.n); draw(); },
+    wa: () => { const M = members(), it = d.items[ui.who]; it.c = M.every(m => it.c.includes(m)) ? [] : [...M]; draw(); },
+    wd: () => { ui.who = null; draw(); },
+    addrow: () => { d.items.push({ n: '', p: '', c: [] }); draw(); },
+    rmv: el => { d.items.splice(+el.dataset.i, 1); if (!d.items.length) d.items.push({ n: '', p: '', c: [] }); ui.who = null; draw(); },
     cam: () => document.getElementById('rcam').click(),
     gal: () => document.getElementById('rgal').click(),
-    sc: () => { scan = null; draw(); },
-    sx: el => { syncScan(); scan.rows.splice(+el.dataset.i, 1); draw(); },
-    sa: () => {
-      syncScan();
-      const o = {}; let n = 0;
-      scan.rows.forEach((r, i) => { const p = parseFloat(r.p), nm = String(r.n).trim(); if (nm && !isNaN(p) && p >= 0) { o['items.' + rid()] = { name: nm, price: p, claims: [], o: Date.now() + i }; n++; } });
-      if (!n) { alert('No valid items to add.'); return; }
-      scan = null; upd(o); draw();
-    },
-    cl: el => copy(link('b', id), el),
-    me: el => { ls.set(meKey(), el.dataset.n); draw(); },
-    pp: () => { pick = { kind: 'parts', sel: [...parts()] }; draw(); },
-    ei: el => { if (bill.locked) return; const k = el.dataset.k; pick = { kind: 'item', k, sel: [...(bill.items[k].claims || [])], pct: splitOK(bill.items[k]) ? { ...bill.items[k].split } : null }; draw(); },
-    no: () => { pick = { kind: 'new', sel: [...newOwn] }; draw(); },
-    pm: () => {
-      if (pick.pct) pick.pct = null;
-      else { const e = Math.floor(10000 / pick.sel.length) / 100; pick.pct = {}; pick.sel.forEach(n => pick.pct[n] = e); pick.pct[pick.sel[0]] = Math.round((e + 100 - e * pick.sel.length) * 100) / 100; }
-      draw();
-    },
-    pt: el => { pick.pct = null; const n = el.dataset.n, i = pick.sel.indexOf(n); if (i < 0) pick.sel.push(n); else pick.sel.splice(i, 1); draw(); },
-    pa: () => { pick.pct = null; const o = pick.kind === 'parts' ? pool() : parts(); pick.sel = o.every(x => pick.sel.includes(x)) ? [] : [...o]; draw(); },
-    pc: () => { pick = null; draw(); },
-    pd: () => {
-      const sel = pick.sel;
-      if (pick.kind === 'parts') {
-        if (!sel.length) { alert('Pick at least one person.'); return; }
-        const o = { parts: sel }; let lost = 0;
-        if (bill.payer && !sel.includes(bill.payer)) o.payer = '';
-        Object.entries(bill.items || {}).forEach(([k, i]) => { const all = i.claims || [], cl = all.filter(n => sel.includes(n)); if (cl.length !== all.length) { o['items.' + k + '.claims'] = cl; lost++; } });
-        if (lost && !confirm('Removing people will clear their claims on ' + lost + ' item(s). Continue?')) return;
-        upd(o);
-      } else if (pick.kind === 'item') {
-        let spl = FV.delete();
-        if (pick.pct && sel.length > 1) {
-          if (Math.abs(sel.reduce((a, n) => a + (pick.pct[n] || 0), 0) - 100) > 0.01) { alert('Percentages must add up to 100%.'); return; }
-          spl = {}; sel.forEach(n => spl[n] = pick.pct[n] || 0);
-        }
-        upd({ ['items.' + pick.k + '.claims']: sel, ['items.' + pick.k + '.split']: spl });
-      }
-      else newOwn = sel;
-      pick = null; draw();
-    },
-    cl2: el => {
-      const me = ls.get(meKey(), ''); if (bill.locked) return;
-      if (!parts().includes(me)) { alert('Pick your name first.'); return; }
-      const k = el.dataset.k, mine = (bill.items[k].claims || []).includes(me);
-      upd({ ['items.' + k + '.claims']: mine ? FV.arrayRemove(me) : FV.arrayUnion(me) });
-    },
-    ai: () => {
-      const ie = document.getElementById('in'), pe = document.getElementById('ip');
-      const n = ie.value.trim(), p = parseFloat(pe.value);
-      if (!n || isNaN(p) || p < 0) { alert('Enter an item name and a price.'); return; }
-      const claims = [...newOwn];
-      ie.value = ''; pe.value = ''; keep = { n: '', p: '' }; newOwn = [];
-      upd({ ['items.' + rid()]: { name: n, price: p, claims, o: Date.now() } });
-    },
-    di: el => { if (confirm('Delete this item?')) upd({ ['items.' + el.dataset.k]: FV.delete() }); },
-    sv: () => { const v = num('Service charge %', bill.svc); if (v !== null) upd({ svc: v }); },
-    tx: () => { const v = num('SST / tax %', bill.tax); if (v !== null) upd({ tax: v }); },
-    ct: el => { const n = el.dataset.n, sp = { ...(bill.split || {}) }, x = sp[n] || { t: 'pct', v: 0 }; sp[n] = { t: x.t === 'amt' ? 'pct' : 'amt', v: x.v }; upd({ split: sp }); },
-    lk: () => { if (!bill.locked && bill.splitMode === 'custom' && !calc(cur()).custom.ok) { alert('Make the custom split add up to the bill before locking.'); return; } upd({ locked: !bill.locked }); },
-    db: () => { if (confirm('Delete this whole bill for everyone?')) ref.delete().then(() => { ls.set('hist', ls.get('hist', []).filter(x => x.id !== id)); go(bill.tripId ? '/t/' + bill.tripId : '/'); }); },
-    cs: el => {
-      const c = calc(cur());
-      copy(bill.name + '\nTotal ' + rm(c.total) + (bill.payer ? ', paid by ' + bill.payer : '') + '\n' + Object.entries(c.per).map(([n, v]) => n + ': ' + rm(v) + ' (' + c.names[n].join(', ') + ')').join('\n') + '\n' + link('b', id), el);
-    }
+    save,
+    del: () => { if (confirm('Delete this expense for everyone?')) db.collection('bills').doc(id).delete().then(() => { ls.set('hist', ls.get('hist', []).filter(x => x.id !== id)); back(); }); }
   });
-  app.onchange = e => { const a = e.target.dataset.a;
-    if (a === 'pv' && pick) { pick.pct = pick.pct || {}; pick.pct[e.target.dataset.n] = Math.max(0, parseFloat(e.target.value) || 0); draw(); return; } if (a === 'py') upd({ payer: e.target.value }); if (a === 'sm') upd({ splitMode: e.target.value });
-    if (a === 'cv') { const n = e.target.dataset.n, sp = { ...(bill.split || {}) }, x = sp[n] || { t: 'pct', v: 0 }; sp[n] = { t: x.t, v: Math.max(0, parseFloat(e.target.value) || 0) }; upd({ split: sp }); } };
+  app.oninput = e => {
+    const t = e.target, f = t.dataset.f;
+    if (!f || t.tagName === 'SELECT') return;
+    if (f === 'pct' || f === 'amt') d[f][t.dataset.n] = parseFloat(t.value) || 0;
+    else if (f === 'in') d.items[+t.dataset.i].n = t.value;
+    else if (f === 'ip') d.items[+t.dataset.i].p = t.value;
+    else d[f] = t.value;
+    hint();
+  };
+  app.onchange = e => { const t = e.target; if (t.tagName === 'SELECT' && t.dataset.f) { d[t.dataset.f] = t.value; draw(); } };
   app.onkeydown = e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('item')) { e.preventDefault(); e.target.click(); } };
 }
 
