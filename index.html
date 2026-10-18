@@ -45,7 +45,7 @@ a{color:var(--acc);font-weight:600}
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
 // ====== PASTE YOUR FIREBASE CONFIG HERE (Firebase console > Project settings > Your apps > Web) ======
-const CFG = { apiKey: "AIzaSyAFVezfimw-kP3_tq-b3DuJ1jP0agB20NM", authDomain: "bill-split-b622d.firebaseapp.com", projectId: "bill-split-b622d", appId: "1:408745893445:web:832f4188ae4b62eb154d2c" };
+const CFG = { apiKey: "PASTE", authDomain: "PASTE", projectId: "PASTE", appId: "PASTE" };
 // =======================================================================================================
 
 const app = document.getElementById('app');
@@ -79,6 +79,11 @@ function calc(b) {
     if (!c.length) unclaimed += i.price * f;
     else c.forEach(n => { per[n] = (per[n] || 0) + i.price / c.length * f; (names[n] = names[n] || []).push(i.name); });
   });
+  if (b.splitMode === 'equal' && (b.parts || []).length) {
+    Object.keys(per).forEach(k => delete per[k]); Object.keys(names).forEach(k => delete names[k]);
+    b.parts.forEach(n => { per[n] = sub * f / b.parts.length; names[n] = ['equal share']; });
+    unclaimed = 0;
+  }
   return { per, names, total: sub * f, unclaimed };
 }
 function balances(bills, sets) {
@@ -139,8 +144,12 @@ function viewHome() {
 }
 function newBill(tripId) {
   const n = prompt('Bill name (e.g. Seafood dinner)'); if (!n) return;
-  const id = rid();
-  db.collection('bills').doc(id).set({ name: n.trim(), tripId: tripId || null, members: [], items: {}, svc: 0, tax: 0, payer: '', locked: false, created: Date.now() }).then(() => go('/b/' + id));
+  const mk = m => {
+    const id = rid();
+    db.collection('bills').doc(id).set({ name: n.trim(), tripId: tripId || null, members: tripId ? [] : m, parts: m, items: {}, svc: 0, tax: 0, payer: '', splitMode: 'items', locked: false, created: Date.now() }).then(() => go('/b/' + id));
+  };
+  if (tripId) db.collection('trips').doc(tripId).get().then(d => { const m = (d.data() || {}).members || []; if (!m.length) { alert('Add people to the trip first.'); return; } mk(m); });
+  else { const m = [...new Set((prompt('Who is in this bill? Names separated by commas') || '').split(',').map(s => s.trim()).filter(Boolean))]; if (m.length) mk(m); }
 }
 
 // ---------- trip ----------
@@ -150,6 +159,7 @@ function viewTrip(id) {
   const draw = () => {
     if (trip === null) { app.innerHTML = '<p class="m">Loading...</p>'; return; }
     if (trip === false) { app.innerHTML = '<div class="card"><b>Trip not found.</b> <a href="#/">Back</a></div>'; return; }
+    bills.forEach(b => { b.parts = b.parts || trip.members; });
     const bal = balances(bills, trip.settlements), sg = suggest(bal);
     const spent = bills.reduce((s, b) => s + calc(b).total, 0);
     app.innerHTML = `<a href="#/">All trips</a><h1>${esc(trip.name)}</h1>
@@ -174,26 +184,38 @@ function viewTrip(id) {
 
 // ---------- bill ----------
 function viewBill(id) {
-  let bill = null, trip = null, tripSub = false;
+  let bill = null, trip = null, tripSub = false, pick = null, newOwn = [], keep = { n: '', p: '' };
   const ref = db.collection('bills').doc(id);
+  const pool = () => bill.tripId ? (trip ? trip.members : []) : (bill.members || []);
+  const parts = () => bill.parts || pool();
+  const cur = () => ({ ...bill, parts: parts() });
+  const meKey = () => 'me_' + (bill.tripId || id);
   const draw = () => {
     if (bill === null) { app.innerHTML = '<p class="m">Loading...</p>'; return; }
     if (bill === false) { app.innerHTML = '<div class="card"><b>Bill not found.</b> <a href="#/">Back</a></div>'; return; }
-    const key = 'me_' + (bill.tripId || id), me = ls.get(key, '');
-    const members = bill.tripId ? (trip ? trip.members : []) : bill.members;
-    const c = calc(bill), locked = bill.locked;
+    const iv = document.getElementById('in'), pv = document.getElementById('ip');
+    if (iv) keep = { n: iv.value, p: pv.value };
+    const P = parts(), saved = ls.get(meKey(), ''), me = P.includes(saved) ? saved : '';
+    const c = calc(cur()), locked = bill.locked, eq = bill.splitMode === 'equal';
     const items = Object.entries(bill.items || {}).sort((a, b) => a[1].o - b[1].o);
     const sum = Object.entries(c.per);
+    const opts = pick ? (pick.kind === 'parts' ? pool() : P) : [];
+    const title = pick ? (pick.kind === 'parts' ? "Who's in this bill?" : pick.kind === 'item' ? 'Whose item is ' + esc((bill.items[pick.k] || {}).name) + '?' : 'Whose item is this?') : '';
+    const panel = pick ? `<div class="card"><div class="row"><h2>${title}</h2><button class="s" data-a="pa">${opts.every(o => pick.sel.includes(o)) ? 'Clear all' : 'Select all'}</button></div>
+      ${opts.map(o => `<div class="row item" tabindex="0" role="checkbox" aria-checked="${pick.sel.includes(o)}" data-a="pt" data-n="${esc(o)}"><span class="n">${esc(o)}</span><b>${pick.sel.includes(o) ? '✓' : ''}</b></div>`).join('') || '<p class="m">No people yet. Ask the organizer to add you to the trip.</p>'}
+      <div class="bar"><button data-a="pd">Done</button><button class="s" data-a="pc">Cancel</button></div></div>` : '';
     app.innerHTML = `<a href="${bill.tripId ? '#/t/' + esc(bill.tripId) : '#/'}">${bill.tripId ? 'Back to trip' : 'All bills'}</a><h1>${esc(bill.name)} ${locked ? '<span class="tag">Locked</span>' : ''}</h1>
-    <div class="bar"><button class="s" data-a="cl">Copy link to share</button></div>
-    <div class="card"><h2>Who are you?</h2><div class="chips">${members.map(m => `<button class="chip ${m === me ? 'on' : ''}" data-a="me" data-n="${esc(m)}">${esc(m)}</button>`).join('')}<button class="chip" data-a="am">+ Add name</button></div></div>
-    <div class="card"><h2>Items</h2><p class="m">${me ? 'Tap an item to claim or unclaim it as ' + esc(me) + '. Several people can share one item.' : 'Pick your name above, then tap the items you had.'}</p>
-    ${items.map(([k, i]) => { const cl = i.claims || []; return `<div class="row item ${cl.includes(me) ? 'mine' : ''}" tabindex="0" role="button" data-a="cl2" data-k="${k}"><span class="n">${esc(i.name)}<br><span class="m">${cl.length ? esc(cl.join(', ')) : ''}</span>${cl.length ? '' : '<span class="tag">unclaimed</span>'}</span><span class="amt">${rm(i.price)}</span>${locked ? '' : `<button class="x" data-a="di" data-k="${k}" aria-label="Delete item">Delete</button>`}</div>`; }).join('') || '<p class="m">No items yet.</p>'}
-    ${locked ? '' : '<div class="f"><input id="in" placeholder="Item name" aria-label="Item name"><input id="ip" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Price" aria-label="Price"><button data-a="ai">Add</button></div>'}</div>
+    <div class="bar"><button class="s" data-a="cl">Copy link to share</button></div>${panel}
+    <div class="card"><h2>Who's in this bill?</h2><div class="chips">${P.map(m => `<span class="chip">${esc(m)}</span>`).join('') || '<span class="m">Nobody yet.</span>'}</div><div class="bar"><button class="s" data-a="pp" ${locked ? 'disabled' : ''}>${P.length} of ${pool().length} people</button></div></div>
+    <div class="card"><h2>Who are you?</h2><div class="chips">${P.map(m => `<button class="chip ${m === me ? 'on' : ''}" data-a="me" data-n="${esc(m)}">${esc(m)}</button>`).join('')}</div><p class="m">Not listed? Ask the organizer to add you.</p></div>
+    <div class="card"><h2>Items</h2><p class="m">${eq ? 'This bill is split equally, so claims are ignored.' : 'Tap an item to change who it belongs to, or press Me too for yourself.'}</p>
+    ${items.map(([k, i]) => { const cl = i.claims || []; return `<div class="row item ${cl.includes(me) ? 'mine' : ''}" tabindex="0" role="button" data-a="ei" data-k="${k}"><span class="n">${esc(i.name)}<br><span class="m">${esc(cl.join(', '))}</span>${cl.length ? '' : '<span class="tag">unclaimed</span>'}</span><span class="amt">${rm(i.price)}</span>${locked ? '' : `<button class="s" data-a="cl2" data-k="${k}">${cl.includes(me) ? 'Not me' : 'Me too'}</button><button class="x" data-a="di" data-k="${k}" aria-label="Delete item">✕</button>`}</div>`; }).join('') || '<p class="m">No items yet.</p>'}
+    ${locked ? '' : `<div class="f"><input id="in" placeholder="Item name" aria-label="Item name" value="${esc(keep.n)}"><input id="ip" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Price" aria-label="Price" value="${esc(keep.p)}"></div><div class="f"><button class="s" data-a="no">${newOwn.length ? newOwn.length + ' owner' + (newOwn.length > 1 ? 's' : '') : 'Whose item?'}</button><button data-a="ai">Add item</button></div>`}</div>
     <div class="card"><h2>Charges and payer</h2>
+    <div class="row"><span class="n">Split method</span><select data-a="sm" ${locked ? 'disabled' : ''}><option value="items" ${eq ? '' : 'selected'}>By items</option><option value="equal" ${eq ? 'selected' : ''}>Equally</option></select></div>
     <div class="row"><span class="n">Service charge</span><span class="amt">${bill.svc}%</span><button class="s" data-a="sv" ${locked ? 'disabled' : ''}>Edit</button></div>
     <div class="row"><span class="n">SST / tax (on top of service)</span><span class="amt">${bill.tax}%</span><button class="s" data-a="tx" ${locked ? 'disabled' : ''}>Edit</button></div>
-    <div class="row"><span class="n">Paid by</span><select data-a="py" ${locked ? 'disabled' : ''}><option value="">Choose</option>${members.map(m => `<option ${m === bill.payer ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></div></div>
+    <div class="row"><span class="n">Paid by</span><select data-a="py" ${locked ? 'disabled' : ''}><option value="">Choose</option>${P.map(m => `<option ${m === bill.payer ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></div></div>
     <div class="card"><h2>Who owes what</h2><div class="big">${rm(c.total)}</div><p class="m">bill total</p>
     ${c.unclaimed > 0.005 ? `<p><span class="tag">${rm(c.unclaimed)} not claimed yet</span></p>` : ''}
     ${sum.map(([n, v]) => `<div class="row"><span class="n"><b>${esc(n)}</b><br><span class="m">${esc(c.names[n].join(', '))}</span></span><span class="amt">${rm(v)}</span></div>`).join('') || '<p class="m">Nobody has claimed anything yet.</p>'}
@@ -209,26 +231,42 @@ function viewBill(id) {
     draw();
   });
   const upd = o => { if (!bill.locked || 'locked' in o) ref.update(o); };
-  const num = (q, cur) => { const v = parseFloat(prompt(q, cur)); return isNaN(v) || v < 0 ? null : v; };
+  const num = (q, v) => { const x = parseFloat(prompt(q, v)); return isNaN(x) || x < 0 ? null : x; };
   on({
     cl: el => copy(link('b', id), el),
-    me: el => { ls.set('me_' + (bill.tripId || id), el.dataset.n); draw(); },
-    am: () => {
-      const n = (prompt('Your name') || '').trim(); if (!n) return;
-      (bill.tripId ? db.collection('trips').doc(bill.tripId) : ref).update({ members: FV.arrayUnion(n) });
-      ls.set('me_' + (bill.tripId || id), n);
+    me: el => { ls.set(meKey(), el.dataset.n); draw(); },
+    pp: () => { pick = { kind: 'parts', sel: [...parts()] }; draw(); },
+    ei: el => { if (bill.locked) return; const k = el.dataset.k; pick = { kind: 'item', k, sel: [...(bill.items[k].claims || [])] }; draw(); },
+    no: () => { pick = { kind: 'new', sel: [...newOwn] }; draw(); },
+    pt: el => { const n = el.dataset.n, i = pick.sel.indexOf(n); if (i < 0) pick.sel.push(n); else pick.sel.splice(i, 1); draw(); },
+    pa: () => { const o = pick.kind === 'parts' ? pool() : parts(); pick.sel = o.every(x => pick.sel.includes(x)) ? [] : [...o]; draw(); },
+    pc: () => { pick = null; draw(); },
+    pd: () => {
+      const sel = pick.sel;
+      if (pick.kind === 'parts') {
+        if (!sel.length) { alert('Pick at least one person.'); return; }
+        const o = { parts: sel }; let lost = 0;
+        if (bill.payer && !sel.includes(bill.payer)) o.payer = '';
+        Object.entries(bill.items || {}).forEach(([k, i]) => { const all = i.claims || [], cl = all.filter(n => sel.includes(n)); if (cl.length !== all.length) { o['items.' + k + '.claims'] = cl; lost++; } });
+        if (lost && !confirm('Removing people will clear their claims on ' + lost + ' item(s). Continue?')) return;
+        upd(o);
+      } else if (pick.kind === 'item') upd({ ['items.' + pick.k + '.claims']: sel });
+      else newOwn = sel;
+      pick = null; draw();
     },
     cl2: el => {
-      const me = ls.get('me_' + (bill.tripId || id), '');
-      if (bill.locked) return;
-      if (!me) { alert('Pick your name first.'); return; }
+      const me = ls.get(meKey(), ''); if (bill.locked) return;
+      if (!parts().includes(me)) { alert('Pick your name first.'); return; }
       const k = el.dataset.k, mine = (bill.items[k].claims || []).includes(me);
       upd({ ['items.' + k + '.claims']: mine ? FV.arrayRemove(me) : FV.arrayUnion(me) });
     },
     ai: () => {
-      const n = document.getElementById('in').value.trim(), p = parseFloat(document.getElementById('ip').value);
+      const ie = document.getElementById('in'), pe = document.getElementById('ip');
+      const n = ie.value.trim(), p = parseFloat(pe.value);
       if (!n || isNaN(p) || p < 0) { alert('Enter an item name and a price.'); return; }
-      upd({ ['items.' + rid()]: { name: n, price: p, claims: [], o: Date.now() } });
+      const claims = [...newOwn];
+      ie.value = ''; pe.value = ''; keep = { n: '', p: '' }; newOwn = [];
+      upd({ ['items.' + rid()]: { name: n, price: p, claims, o: Date.now() } });
     },
     di: el => { if (confirm('Delete this item?')) upd({ ['items.' + el.dataset.k]: FV.delete() }); },
     sv: () => { const v = num('Service charge %', bill.svc); if (v !== null) upd({ svc: v }); },
@@ -236,11 +274,11 @@ function viewBill(id) {
     lk: () => upd({ locked: !bill.locked }),
     db: () => { if (confirm('Delete this whole bill for everyone?')) ref.delete().then(() => { ls.set('hist', ls.get('hist', []).filter(x => x.id !== id)); go(bill.tripId ? '/t/' + bill.tripId : '/'); }); },
     cs: el => {
-      const c = calc(bill);
+      const c = calc(cur());
       copy(bill.name + '\nTotal ' + rm(c.total) + (bill.payer ? ', paid by ' + bill.payer : '') + '\n' + Object.entries(c.per).map(([n, v]) => n + ': ' + rm(v) + ' (' + c.names[n].join(', ') + ')').join('\n') + '\n' + link('b', id), el);
     }
   });
-  app.onchange = e => { if (e.target.dataset.a === 'py') upd({ payer: e.target.value }); };
+  app.onchange = e => { const a = e.target.dataset.a; if (a === 'py') upd({ payer: e.target.value }); if (a === 'sm') upd({ splitMode: e.target.value }); };
   app.onkeydown = e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('item')) { e.preventDefault(); e.target.click(); } };
 }
 
