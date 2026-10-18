@@ -51,6 +51,7 @@ a.ex,.row.ex{color:var(--ink);text-decoration:none;font-weight:400}a.n.ex{displa
 </head>
 <body>
 <div id="app"></div>
+<input type="file" id="rcam" accept="image/*" capture="environment" hidden><input type="file" id="rgal" accept="image/*" hidden>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
@@ -141,11 +142,42 @@ function suggest(bal) {
   return out;
 }
 
+// ---------- receipt scanning ----------
+let tessP = null;
+const loadTess = () => tessP || (tessP = new Promise((res, rej) => {
+  const t = document.createElement('script');
+  t.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+  t.onload = () => res(window.Tesseract);
+  t.onerror = () => { tessP = null; rej(new Error('Could not load the scanner. Check your connection.')); };
+  document.head.appendChild(t);
+}));
+async function prepPhoto(file) {
+  let bmp;
+  try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { bmp = await createImageBitmap(file); }
+  const sc = Math.min(1, 1800 / Math.max(bmp.width, bmp.height)), cv = document.createElement('canvas');
+  cv.width = Math.round(bmp.width * sc); cv.height = Math.round(bmp.height * sc);
+  const x = cv.getContext('2d'); x.filter = 'grayscale(1) contrast(1.4)'; x.drawImage(bmp, 0, 0, cv.width, cv.height);
+  return cv;
+}
+const SKIP = /total|tax|sst|gst|service|svc|change|cash|round|paid|payment|tender|discount|balance|visa|master|card|invoice|receipt|table|cashier|date|time|tel|phone|thank|amount|qty|item/i;
+function parseReceipt(text) {
+  const out = [];
+  text.split('\n').forEach(line => {
+    const t = line.replace(/\s+/g, ' ').trim();
+    const m = t.match(/^(.*?)\s*(?:RM|\$)?\s*(\d{1,5}[.,]\d{2})\s*[A-Za-z]{0,2}$/);
+    if (!m) return;
+    const name = m[1].replace(/[|_~=*]+/g, ' ').replace(/\s*(RM|\$)$/i, '').replace(/[\s.:-]+$/, '').trim();
+    if (name.length < 2 || !/[A-Za-z]/.test(name) || SKIP.test(name)) return;
+    out.push({ n: name, p: m[2].replace(',', '.') });
+  });
+  return out;
+}
+
 // ---------- routing ----------
-let db, FV, unsubs = [];
+let db, FV, unsubs = [], scanHook = null;
 const sub = (ref, fn) => unsubs.push(ref.onSnapshot(fn, e => { app.innerHTML = '<div class="card"><b>Could not load.</b><p class="m">' + esc(e.message) + '</p><a href="#/">Back</a></div>'; }));
 function route() {
-  unsubs.forEach(u => u()); unsubs = [];
+  unsubs.forEach(u => u()); unsubs = []; scanHook = null;
   app.onclick = app.onchange = null;
   const [, t, id] = location.hash.split('/');
   if (t === 't' && id) viewTrip(id);
@@ -248,7 +280,7 @@ function viewTrip(id) {
 
 // ---------- bill ----------
 function viewBill(id) {
-  let bill = null, trip = null, tripSub = false, pick = null, newOwn = [], keep = { n: '', p: '' };
+  let bill = null, trip = null, tripSub = false, pick = null, newOwn = [], keep = { n: '', p: '' }, scan = null;
   const ref = db.collection('bills').doc(id);
   const pool = () => bill.tripId ? (trip ? trip.members : []) : (bill.members || []);
   const parts = () => bill.parts || pool();
@@ -257,6 +289,7 @@ function viewBill(id) {
   const draw = () => {
     if (bill === null) { app.innerHTML = '<p class="m">Loading...</p>'; return; }
     if (bill === false) { app.innerHTML = '<div class="card"><b>Bill not found.</b> <a href="#/">Back</a></div>'; return; }
+    syncScan();
     const iv = document.getElementById('in'), pv = document.getElementById('ip');
     if (iv) keep = { n: iv.value, p: pv.value };
     const P = parts(), saved = ls.get(meKey(), ''), me = P.includes(saved) ? saved : '';
@@ -272,6 +305,9 @@ function viewBill(id) {
       ${opts.map(o => `<div class="row item" tabindex="0" role="checkbox" aria-checked="${pick.sel.includes(o)}" data-a="pt" data-n="${esc(o)}"><span class="n">${esc(o)}</span>${pick.pct && pick.sel.includes(o) ? `<input type="number" inputmode="decimal" min="0" step="0.01" style="width:84px" data-a="pv" data-n="${esc(o)}" value="${pick.pct[o] ?? ''}" aria-label="Percent for ${esc(o)}"><span>%</span>` : ''}<b>${pick.sel.includes(o) ? '✓' : ''}</b></div>`).join('') || '<p class="m">No people yet. Ask the organizer to add you to the trip.</p>'}
       ${pick.kind === 'item' && pick.sel.length > 1 ? `<div class="bar"><button class="s" data-a="pm">${pick.pct ? 'Split evenly' : 'Split by %'}</button>${pick.pct ? `<span class="tag">Total ${Math.round(pick.sel.reduce((a, n) => a + (pick.pct[n] || 0), 0) * 100) / 100}%, need 100%</span>` : ''}</div>` : ''}
       <div class="bar"><button data-a="pd">Done</button><button class="s" data-a="pc">Cancel</button></div></div>` : '';
+    const scanUI = scan ? `<div class="dd"><div class="row"><h2>Scanned items</h2><button class="s" data-a="sc">Close</button></div>
+      ${scan.rows ? '<p class="m">Check each line. Fix names or prices and remove anything that is not an item.</p>' + scan.rows.map((r, i) => `<div class="f"><input data-sr="${i}" data-sf="n" value="${esc(r.n)}" aria-label="Item name"><input data-sr="${i}" data-sf="p" type="number" step="0.01" inputmode="decimal" value="${esc(r.p)}" aria-label="Price"><button class="x" data-a="sx" data-i="${i}" aria-label="Remove line">✕</button></div>`).join('') + (scan.rows.length ? `<div class="bar"><button data-a="sa">Add ${scan.rows.length} items</button></div>` : '') : ''}
+      <p class="m" id="scm">${esc(scan.msg || '')}</p></div>` : '';
     const dd = (kind, k) => pick && pick.kind === kind && (kind !== 'item' || pick.k === k) ? panelHtml : '';
     app.innerHTML = `<div class="hd"><a href="${bill.tripId ? '#/t/' + esc(bill.tripId) : '#/'}">‹ ${bill.tripId ? 'Group' : 'Groups'}</a><h1>${esc(bill.name)} ${locked ? '<span class="tag">Locked</span>' : ''}</h1><p class="m">${rm(c.total)} total${bill.payer ? ', paid by ' + esc(bill.payer) : ''}</p></div>
     <div class="bar"><button class="s" data-a="cl">Copy link to share</button></div>
@@ -279,7 +315,7 @@ function viewBill(id) {
     <div class="card"><h2>Who are you?</h2><div class="chips">${P.map(m => `<button class="chip ${m === me ? 'on' : ''}" data-a="me" data-n="${esc(m)}">${esc(m)}</button>`).join('')}</div><p class="m">Not listed? Ask the organizer to add you.</p></div>
     <div class="card"><h2>Items</h2><p class="m">${eq || cm ? 'This bill is split ' + (eq ? 'equally' : 'by custom amounts') + ', so claims are ignored.' : 'Tap an item to choose who it belongs to.'}</p>
     ${items.map(([k, i]) => { const cl = i.claims || []; return `<div class="row item ${cl.includes(me) ? 'mine' : ''}" tabindex="0" role="button" data-a="ei" data-k="${k}"><span class="n">${esc(i.name)}<br><span class="m">${esc(cl.map(n => splitOK(i) ? n + ' ' + i.split[n] + '%' : n).join(', '))}</span>${cl.length ? '' : '<span class="tag">unclaimed</span>'}</span><span class="amt">${rm(i.price)}</span>${locked ? '' : `<button class="x" data-a="di" data-k="${k}" aria-label="Delete item">✕</button>`}</div>${dd('item', k)}`; }).join('') || '<p class="m">No items yet.</p>'}
-    ${locked ? '' : `<div class="f"><input id="in" placeholder="Item name" aria-label="Item name" value="${esc(keep.n)}"><input id="ip" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Price" aria-label="Price" value="${esc(keep.p)}"></div><div class="f"><button class="s" data-a="no">${newOwn.length ? newOwn.length + ' owner' + (newOwn.length > 1 ? 's' : '') : 'Whose item?'}</button><button data-a="ai">Add item</button></div>${dd('new')}`}</div>
+    ${locked ? '' : `<div class="f"><input id="in" placeholder="Item name" aria-label="Item name" value="${esc(keep.n)}"><input id="ip" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Price" aria-label="Price" value="${esc(keep.p)}"></div><div class="f"><button class="s" data-a="no">${newOwn.length ? newOwn.length + ' owner' + (newOwn.length > 1 ? 's' : '') : 'Whose item?'}</button><button data-a="ai">Add item</button></div>${dd('new')}<div class="f"><button class="s" data-a="cam">Scan receipt (camera)</button><button class="s" data-a="gal">From gallery</button></div>${scanUI}`}</div>
     <div class="card"><h2>Charges and payer</h2>
     <div class="row"><span class="n">Split method</span><select data-a="sm" ${locked ? 'disabled' : ''}><option value="items" ${eq || cm ? '' : 'selected'}>By items</option><option value="equal" ${eq ? 'selected' : ''}>Equally</option><option value="custom" ${cm ? 'selected' : ''}>Custom % / RM</option></select></div>
     <div class="row"><span class="n">Service charge</span><span class="amt">${bill.svc}%</span><button class="s" data-a="sv" ${locked ? 'disabled' : ''}>Edit</button></div>
@@ -300,8 +336,33 @@ function viewBill(id) {
     draw();
   });
   const upd = o => { if (!bill.locked || 'locked' in o) ref.update(o); };
+  const syncScan = () => { if (scan && scan.rows) document.querySelectorAll('input[data-sr]').forEach(e => { const r = scan.rows[+e.dataset.sr]; if (r) r[e.dataset.sf] = e.value; }); };
+  const scanFile = async f => {
+    if (bill.locked) return;
+    scan = { msg: 'Preparing photo...', rows: null }; draw();
+    try {
+      const [T, cv] = await Promise.all([loadTess(), prepPhoto(f)]);
+      const r = await T.recognize(cv, 'eng', { logger: m => { if (m.status === 'recognizing text' && scanHook === scanFile) { const e = document.getElementById('scm'); if (e) e.textContent = 'Reading receipt ' + Math.round(m.progress * 100) + '%'; } } });
+      if (scanHook !== scanFile) return;
+      const rows = parseReceipt(r.data.text);
+      scan = { msg: rows.length ? '' : 'No items found. Try a flatter, brighter photo, or add items by hand.', rows };
+    } catch (e) { if (scanHook !== scanFile) return; scan = { msg: 'Scan failed: ' + e.message, rows: null }; }
+    draw();
+  };
+  scanHook = scanFile;
   const num = (q, v) => { const x = parseFloat(prompt(q, v)); return isNaN(x) || x < 0 ? null : x; };
   on({
+    cam: () => document.getElementById('rcam').click(),
+    gal: () => document.getElementById('rgal').click(),
+    sc: () => { scan = null; draw(); },
+    sx: el => { syncScan(); scan.rows.splice(+el.dataset.i, 1); draw(); },
+    sa: () => {
+      syncScan();
+      const o = {}; let n = 0;
+      scan.rows.forEach((r, i) => { const p = parseFloat(r.p), nm = String(r.n).trim(); if (nm && !isNaN(p) && p >= 0) { o['items.' + rid()] = { name: nm, price: p, claims: [], o: Date.now() + i }; n++; } });
+      if (!n) { alert('No valid items to add.'); return; }
+      scan = null; upd(o); draw();
+    },
     cl: el => copy(link('b', id), el),
     me: el => { ls.set(meKey(), el.dataset.n); draw(); },
     pp: () => { pick = { kind: 'parts', sel: [...parts()] }; draw(); },
@@ -367,6 +428,7 @@ function viewBill(id) {
 }
 
 // ---------- start ----------
+['rcam', 'rgal'].forEach(i => document.getElementById(i).onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f && scanHook) scanHook(f); });
 if (CFG.projectId === 'PASTE') {
   app.innerHTML = '<div class="card"><h2>One more step</h2><p>Open <b>index.html</b>, find <b>CFG</b> near the top of the script, and paste in your Firebase web app config.</p></div>';
 } else {
