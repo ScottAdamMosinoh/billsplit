@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Split the bill</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#e6edf1;--paper:#fff;--ink:#17283b;--mute:#5d6f80;--line:#c4d0d8;--acc:#0b7a75;--accbg:#d8f0ee;--warn:#b86e00;--warnbg:#fff1d6;--bad:#b3261e}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1820;--paper:#18252f;--ink:#e8eff4;--mute:#93a5b3;--line:#32444f;--acc:#4fd1c5;--accbg:#12373a;--warn:#f0b24a;--warnbg:#3a2c0f;--bad:#ff8a80}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 Figtree,system-ui,sans-serif;padding:max(12px,env(safe-area-inset-top)) 12px 40px}
+#app{max-width:560px;margin:0 auto}
+h1{font-size:1.6rem;font-weight:800;margin:.4em 0 .2em;letter-spacing:-.02em}
+h2{font-size:1.05rem;font-weight:800;margin:0 0 .5em}
+.card{background:var(--paper);border-radius:6px;padding:14px 16px;margin:12px 0;box-shadow:0 0 0 1px var(--line)}
+.m{color:var(--mute);font-size:.9rem}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:2px dashed var(--line)}
+.row:last-child{border-bottom:0}
+.row .n{flex:1;min-width:0}
+.amt{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+button,select,input{font:inherit;color:inherit}
+button{background:var(--ink);color:var(--paper);border:0;border-radius:6px;padding:9px 14px;font-weight:600;cursor:pointer}
+button.s{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--line)}
+button.x{background:transparent;color:var(--bad);padding:4px 8px}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,.item:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+input,select{background:var(--bg);border:1.5px solid var(--line);border-radius:6px;padding:9px 10px;min-width:0}
+.f{display:flex;gap:8px;margin-top:8px}.f input:first-child{flex:1}.f input[type=number]{width:96px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border-radius:99px;padding:7px 14px;background:var(--bg);box-shadow:inset 0 0 0 1.5px var(--line);cursor:pointer;font-weight:600;border:0;color:var(--ink)}
+.chip.on{background:var(--acc);color:var(--paper);box-shadow:none}
+.item{cursor:pointer}
+.item.mine{background:var(--accbg);margin:0 -16px;padding:9px 16px}
+.tag{display:inline-block;font-size:.8rem;border-radius:4px;padding:1px 7px;background:var(--warnbg);color:var(--warn);font-weight:600}
+.big{font-size:1.5rem;font-weight:800;font-variant-numeric:tabular-nums}
+a{color:var(--acc);font-weight:600}
+.pos{color:var(--acc)}.neg{color:var(--bad)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+// ====== PASTE YOUR FIREBASE CONFIG HERE (Firebase console > Project settings > Your apps > Web) ======
+const CFG = { apiKey: "AIzaSyAFVezfimw-kP3_tq-b3DuJ1jP0agB20NM", authDomain: "bill-split-b622d.firebaseapp.com", projectId: "bill-split-b622d", appId: "1:408745893445:web:832f4188ae4b62eb154d2c" };
+// =======================================================================================================
+
+const app = document.getElementById('app');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const rm = n => 'RM ' + (Math.round(n * 100) / 100).toFixed(2);
+const rid = () => Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 5);
+const ls = {
+  get(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+const link = (t, id) => location.href.split('#')[0] + '#/' + t + '/' + id;
+const copy = async (txt, btn) => {
+  try { await navigator.clipboard.writeText(txt); if (btn) { const o = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => btn.textContent = o, 1400); } }
+  catch { prompt('Copy this:', txt); }
+};
+function addHist(t, id, name) {
+  const h = ls.get('hist', []).filter(x => x.id !== id);
+  h.unshift({ t, id, name });
+  ls.set('hist', h.slice(0, 200));
+}
+
+// ---------- maths ----------
+function calc(b) {
+  const items = Object.values(b.items || {});
+  const f = (1 + (b.svc || 0) / 100) * (1 + (b.tax || 0) / 100);
+  const per = {}, names = {};
+  let sub = 0, unclaimed = 0;
+  items.forEach(i => {
+    sub += i.price;
+    const c = i.claims || [];
+    if (!c.length) unclaimed += i.price * f;
+    else c.forEach(n => { per[n] = (per[n] || 0) + i.price / c.length * f; (names[n] = names[n] || []).push(i.name); });
+  });
+  return { per, names, total: sub * f, unclaimed };
+}
+function balances(bills, sets) {
+  const bal = {}, add = (n, v) => bal[n] = (bal[n] || 0) + v;
+  bills.forEach(b => {
+    if (!b.payer) return;
+    Object.entries(calc(b).per).forEach(([n, v]) => { if (n !== b.payer) { add(n, -v); add(b.payer, v); } });
+  });
+  (sets || []).forEach(s => { add(s.from, s.amt); add(s.to, -s.amt); });
+  return bal;
+}
+function suggest(bal) {
+  const d = [], c = [];
+  Object.entries(bal).forEach(([n, v]) => { if (v < -0.005) d.push([n, -v]); else if (v > 0.005) c.push([n, v]); });
+  d.sort((a, b) => b[1] - a[1]); c.sort((a, b) => b[1] - a[1]);
+  const out = []; let i = 0, j = 0;
+  while (i < d.length && j < c.length) {
+    const x = Math.min(d[i][1], c[j][1]);
+    out.push({ from: d[i][0], to: c[j][0], amt: Math.round(x * 100) / 100 });
+    d[i][1] -= x; c[j][1] -= x;
+    if (d[i][1] < .005) i++;
+    if (c[j][1] < .005) j++;
+  }
+  return out;
+}
+
+// ---------- routing ----------
+let db, FV, unsubs = [];
+const sub = (ref, fn) => unsubs.push(ref.onSnapshot(fn, e => { app.innerHTML = '<div class="card"><b>Could not load.</b><p class="m">' + esc(e.message) + '</p><a href="#/">Back</a></div>'; }));
+function route() {
+  unsubs.forEach(u => u()); unsubs = [];
+  app.onclick = app.onchange = null;
+  const [, t, id] = location.hash.split('/');
+  if (t === 't' && id) viewTrip(id);
+  else if (t === 'b' && id) viewBill(id);
+  else viewHome();
+  window.scrollTo(0, 0);
+}
+window.addEventListener('hashchange', route);
+const go = h => { location.hash = h; };
+const on = (map) => {
+  app.onclick = e => { const el = e.target.closest('[data-a]'); if (el && map[el.dataset.a]) { e.stopPropagation(); map[el.dataset.a](el, e); } };
+};
+
+// ---------- home ----------
+function viewHome() {
+  const h = ls.get('hist', []);
+  app.innerHTML = `<h1>Split the bill</h1><p class="m">Make a trip or a single bill, then share the link. Friends pick their own items, no sign-in.</p>
+  <div class="bar"><button data-a="nt">New trip</button><button class="s" data-a="nb">New single bill</button></div>
+  <div class="card"><h2>Your trips and bills</h2>${h.length ? h.map(x => `<div class="row"><a class="n" href="#/${x.t}/${esc(x.id)}">${x.t === 't' ? 'Trip: ' : ''}${esc(x.name)}</a><button class="x" data-a="rm" data-id="${esc(x.id)}" aria-label="Remove from list">Remove</button></div>`).join('') : '<p class="m">Nothing yet. Start with a new trip or bill.</p>'}
+  ${h.length ? '<div class="bar"><button class="s" data-a="bk">Copy all my links</button></div><p class="m">This list lives on this phone only. Saved links still open your bills anywhere.</p>' : ''}</div>`;
+  on({
+    nt: () => { const n = prompt('Trip name (e.g. Langkawi 2026)'); if (!n) return; const id = rid(); db.collection('trips').doc(id).set({ name: n.trim(), members: [], settlements: [], created: Date.now() }).then(() => go('/t/' + id)); },
+    nb: () => newBill(null),
+    rm: el => { ls.set('hist', ls.get('hist', []).filter(x => x.id !== el.dataset.id)); viewHome(); },
+    bk: el => copy(ls.get('hist', []).map(x => x.name + ': ' + link(x.t, x.id)).join('\n'), el)
+  });
+}
+function newBill(tripId) {
+  const n = prompt('Bill name (e.g. Seafood dinner)'); if (!n) return;
+  const id = rid();
+  db.collection('bills').doc(id).set({ name: n.trim(), tripId: tripId || null, members: [], items: {}, svc: 0, tax: 0, payer: '', locked: false, created: Date.now() }).then(() => go('/b/' + id));
+}
+
+// ---------- trip ----------
+function viewTrip(id) {
+  let trip = null, bills = [];
+  const ref = db.collection('trips').doc(id);
+  const draw = () => {
+    if (trip === null) { app.innerHTML = '<p class="m">Loading...</p>'; return; }
+    if (trip === false) { app.innerHTML = '<div class="card"><b>Trip not found.</b> <a href="#/">Back</a></div>'; return; }
+    const bal = balances(bills, trip.settlements), sg = suggest(bal);
+    const spent = bills.reduce((s, b) => s + calc(b).total, 0);
+    app.innerHTML = `<a href="#/">All trips</a><h1>${esc(trip.name)}</h1>
+    <p class="m">Total spent <b>${rm(spent)}</b> across ${bills.length} bill${bills.length === 1 ? '' : 's'}</p>
+    <div class="bar"><button data-a="nb">Add a bill</button><button class="s" data-a="cl">Copy trip link</button></div>
+    <div class="card"><h2>Who is in this trip</h2><div class="chips">${trip.members.map(m => `<span class="chip">${esc(m)}</span>`).join('') || '<span class="m">Add everyone once; every bill reuses these names.</span>'}</div><div class="bar"><button class="s" data-a="am">Add a person</button></div></div>
+    <div class="card"><h2>Bills</h2>${bills.sort((a, b) => b.created - a.created).map(b => `<div class="row"><a class="n" href="#/b/${esc(b._id)}">${esc(b.name)}</a><span class="m">${esc(b.payer ? 'paid by ' + b.payer : 'no payer yet')}</span><span class="amt">${rm(calc(b).total)}</span></div>`).join('') || '<p class="m">No bills yet.</p>'}</div>
+    <div class="card"><h2>Balances</h2>${Object.keys(bal).length ? Object.entries(bal).map(([n, v]) => `<div class="row"><span class="n">${esc(n)}</span><span class="amt ${v > 0.005 ? 'pos' : v < -0.005 ? 'neg' : ''}">${v > 0.005 ? 'is owed ' + rm(v) : v < -0.005 ? 'owes ' + rm(-v) : 'settled'}</span></div>`).join('') : '<p class="m">Balances appear once bills have payers and claimed items.</p>'}</div>
+    <div class="card"><h2>Settle up</h2>${sg.map(s => `<div class="row"><span class="n">${esc(s.from)} pays ${esc(s.to)}</span><span class="amt">${rm(s.amt)}</span><button class="s" data-a="st" data-f="${esc(s.from)}" data-t="${esc(s.to)}" data-v="${s.amt}">Mark paid</button></div>`).join('') || '<p class="m">Everyone is square.</p>'}
+    ${(trip.settlements || []).length ? '<p class="m">Recorded payments</p>' + trip.settlements.map((s, i) => `<div class="row"><span class="n m">${esc(s.from)} paid ${esc(s.to)} ${rm(s.amt)}</span><button class="x" data-a="us" data-i="${i}">Undo</button></div>`).join('') : ''}</div>`;
+  };
+  sub(ref, d => { trip = d.exists ? d.data() : false; if (trip) addHist('t', id, trip.name); draw(); });
+  sub(db.collection('bills').where('tripId', '==', id), q => { bills = q.docs.map(d => ({ ...d.data(), _id: d.id })); draw(); });
+  on({
+    nb: () => newBill(id),
+    cl: el => copy(link('t', id), el),
+    am: () => { const n = (prompt('Name') || '').trim(); if (n) ref.update({ members: FV.arrayUnion(n) }); },
+    st: el => { if (confirm(el.dataset.f + ' paid ' + el.dataset.t + ' ' + rm(+el.dataset.v) + '?')) ref.update({ settlements: FV.arrayUnion({ from: el.dataset.f, to: el.dataset.t, amt: +el.dataset.v, t: Date.now() }) }); },
+    us: el => { const s = trip.settlements[+el.dataset.i]; if (s && confirm('Undo this payment?')) ref.update({ settlements: FV.arrayRemove(s) }); }
+  });
+}
+
+// ---------- bill ----------
+function viewBill(id) {
+  let bill = null, trip = null, tripSub = false;
+  const ref = db.collection('bills').doc(id);
+  const draw = () => {
+    if (bill === null) { app.innerHTML = '<p class="m">Loading...</p>'; return; }
+    if (bill === false) { app.innerHTML = '<div class="card"><b>Bill not found.</b> <a href="#/">Back</a></div>'; return; }
+    const key = 'me_' + (bill.tripId || id), me = ls.get(key, '');
+    const members = bill.tripId ? (trip ? trip.members : []) : bill.members;
+    const c = calc(bill), locked = bill.locked;
+    const items = Object.entries(bill.items || {}).sort((a, b) => a[1].o - b[1].o);
+    const sum = Object.entries(c.per);
+    app.innerHTML = `<a href="${bill.tripId ? '#/t/' + esc(bill.tripId) : '#/'}">${bill.tripId ? 'Back to trip' : 'All bills'}</a><h1>${esc(bill.name)} ${locked ? '<span class="tag">Locked</span>' : ''}</h1>
+    <div class="bar"><button class="s" data-a="cl">Copy link to share</button></div>
+    <div class="card"><h2>Who are you?</h2><div class="chips">${members.map(m => `<button class="chip ${m === me ? 'on' : ''}" data-a="me" data-n="${esc(m)}">${esc(m)}</button>`).join('')}<button class="chip" data-a="am">+ Add name</button></div></div>
+    <div class="card"><h2>Items</h2><p class="m">${me ? 'Tap an item to claim or unclaim it as ' + esc(me) + '. Several people can share one item.' : 'Pick your name above, then tap the items you had.'}</p>
+    ${items.map(([k, i]) => { const cl = i.claims || []; return `<div class="row item ${cl.includes(me) ? 'mine' : ''}" tabindex="0" role="button" data-a="cl2" data-k="${k}"><span class="n">${esc(i.name)}<br><span class="m">${cl.length ? esc(cl.join(', ')) : ''}</span>${cl.length ? '' : '<span class="tag">unclaimed</span>'}</span><span class="amt">${rm(i.price)}</span>${locked ? '' : `<button class="x" data-a="di" data-k="${k}" aria-label="Delete item">Delete</button>`}</div>`; }).join('') || '<p class="m">No items yet.</p>'}
+    ${locked ? '' : '<div class="f"><input id="in" placeholder="Item name" aria-label="Item name"><input id="ip" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Price" aria-label="Price"><button data-a="ai">Add</button></div>'}</div>
+    <div class="card"><h2>Charges and payer</h2>
+    <div class="row"><span class="n">Service charge</span><span class="amt">${bill.svc}%</span><button class="s" data-a="sv" ${locked ? 'disabled' : ''}>Edit</button></div>
+    <div class="row"><span class="n">SST / tax (on top of service)</span><span class="amt">${bill.tax}%</span><button class="s" data-a="tx" ${locked ? 'disabled' : ''}>Edit</button></div>
+    <div class="row"><span class="n">Paid by</span><select data-a="py" ${locked ? 'disabled' : ''}><option value="">Choose</option>${members.map(m => `<option ${m === bill.payer ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></div></div>
+    <div class="card"><h2>Who owes what</h2><div class="big">${rm(c.total)}</div><p class="m">bill total</p>
+    ${c.unclaimed > 0.005 ? `<p><span class="tag">${rm(c.unclaimed)} not claimed yet</span></p>` : ''}
+    ${sum.map(([n, v]) => `<div class="row"><span class="n"><b>${esc(n)}</b><br><span class="m">${esc(c.names[n].join(', '))}</span></span><span class="amt">${rm(v)}</span></div>`).join('') || '<p class="m">Nobody has claimed anything yet.</p>'}
+    <div class="bar"><button data-a="cs">Copy summary for WhatsApp</button></div></div>
+    <div class="bar"><button class="s" data-a="lk">${locked ? 'Unlock bill' : 'Lock bill'}</button><button class="s" data-a="db">Delete bill</button></div>`;
+  };
+  sub(ref, d => {
+    bill = d.exists ? d.data() : false;
+    if (bill) {
+      addHist('b', id, bill.name);
+      if (bill.tripId && !tripSub) { tripSub = true; sub(db.collection('trips').doc(bill.tripId), t => { trip = t.exists ? t.data() : null; draw(); }); }
+    }
+    draw();
+  });
+  const upd = o => { if (!bill.locked || 'locked' in o) ref.update(o); };
+  const num = (q, cur) => { const v = parseFloat(prompt(q, cur)); return isNaN(v) || v < 0 ? null : v; };
+  on({
+    cl: el => copy(link('b', id), el),
+    me: el => { ls.set('me_' + (bill.tripId || id), el.dataset.n); draw(); },
+    am: () => {
+      const n = (prompt('Your name') || '').trim(); if (!n) return;
+      (bill.tripId ? db.collection('trips').doc(bill.tripId) : ref).update({ members: FV.arrayUnion(n) });
+      ls.set('me_' + (bill.tripId || id), n);
+    },
+    cl2: el => {
+      const me = ls.get('me_' + (bill.tripId || id), '');
+      if (bill.locked) return;
+      if (!me) { alert('Pick your name first.'); return; }
+      const k = el.dataset.k, mine = (bill.items[k].claims || []).includes(me);
+      upd({ ['items.' + k + '.claims']: mine ? FV.arrayRemove(me) : FV.arrayUnion(me) });
+    },
+    ai: () => {
+      const n = document.getElementById('in').value.trim(), p = parseFloat(document.getElementById('ip').value);
+      if (!n || isNaN(p) || p < 0) { alert('Enter an item name and a price.'); return; }
+      upd({ ['items.' + rid()]: { name: n, price: p, claims: [], o: Date.now() } });
+    },
+    di: el => { if (confirm('Delete this item?')) upd({ ['items.' + el.dataset.k]: FV.delete() }); },
+    sv: () => { const v = num('Service charge %', bill.svc); if (v !== null) upd({ svc: v }); },
+    tx: () => { const v = num('SST / tax %', bill.tax); if (v !== null) upd({ tax: v }); },
+    lk: () => upd({ locked: !bill.locked }),
+    db: () => { if (confirm('Delete this whole bill for everyone?')) ref.delete().then(() => { ls.set('hist', ls.get('hist', []).filter(x => x.id !== id)); go(bill.tripId ? '/t/' + bill.tripId : '/'); }); },
+    cs: el => {
+      const c = calc(bill);
+      copy(bill.name + '\nTotal ' + rm(c.total) + (bill.payer ? ', paid by ' + bill.payer : '') + '\n' + Object.entries(c.per).map(([n, v]) => n + ': ' + rm(v) + ' (' + c.names[n].join(', ') + ')').join('\n') + '\n' + link('b', id), el);
+    }
+  });
+  app.onchange = e => { if (e.target.dataset.a === 'py') upd({ payer: e.target.value }); };
+  app.onkeydown = e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('item')) { e.preventDefault(); e.target.click(); } };
+}
+
+// ---------- start ----------
+if (CFG.projectId === 'PASTE') {
+  app.innerHTML = '<div class="card"><h2>One more step</h2><p>Open <b>index.html</b>, find <b>CFG</b> near the top of the script, and paste in your Firebase web app config.</p></div>';
+} else {
+  firebase.initializeApp(CFG);
+  db = firebase.firestore();
+  FV = firebase.firestore.FieldValue;
+  route();
+}
+</script>
+</body>
+</html>
