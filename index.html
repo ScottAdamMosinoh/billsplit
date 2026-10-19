@@ -50,6 +50,11 @@ a.ex,.row.ex{color:var(--ink);text-decoration:none;font-weight:400}a.n.ex{displa
 .w{width:100%;margin:6px 0}
 .rnd{border-radius:50%;width:38px;height:38px;padding:0;display:inline-grid;place-items:center;flex:none}
 .tb{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}.tb th,.tb td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+.ph{position:sticky;top:0;z-index:2;background:var(--bg);display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:8px 0;margin-bottom:2px;border-bottom:1px solid var(--line)}
+.ph2{flex-basis:100%;display:flex;justify-content:space-between;align-items:center}
+.feebox{align-items:center}.feebox input{flex:1;width:auto}.pct{font-weight:800;font-size:1.1rem;color:var(--mute);padding:0 4px}
+.sep{border:0;border-top:2px solid var(--line);margin:14px 0 10px}
+.tb tr.grp td{font-weight:800;border-top:2px solid var(--ink)}
 </style>
 </head>
 <body>
@@ -82,6 +87,7 @@ function addHist(t, id, name) {
 }
 
 const CURS = ['MYR', 'SGD', 'USD', 'EUR', 'GBP', 'JPY', 'THB', 'IDR', 'AUD', 'CNY', 'KRW', 'INR'];
+const iso = t => { const x = new Date(t); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
 const fmt = (n, c) => (c || 'MYR') + ' ' + (Math.round(n * 100) / 100).toFixed(2);
 // ---------- maths ----------
 function splitOK(i) {
@@ -97,7 +103,7 @@ function calc(b) {
     return { per, names, total: T, unclaimed: 0, custom: null };
   }
   const items = Object.values(b.items || {});
-  const f = (1 + (b.svc || 0) / 100) * (1 + (b.tax || 0) / 100);
+  const f = b.fee != null ? 1 + b.fee / 100 : (1 + (b.svc || 0) / 100) * (1 + (b.tax || 0) / 100);
   const per = {}, names = {};
   let sub = 0, unclaimed = 0;
   items.forEach(i => {
@@ -274,15 +280,15 @@ function viewTrip(id) {
     const meCard = !me && trip.members.length ? `<div class="card"><h2>Who are you?</h2><div class="chips">${chips()}</div></div>` : '';
     let body = '';
     if (tab === 'x') {
-      body = [...bills].sort((a, b) => b.created - a.created).map(b => {
-        const c = calc(b), d = new Date(b.created), cu = b.currency || 'MYR';
+      body = [...bills].sort((a, b) => (b.date || iso(b.created)).localeCompare(a.date || iso(a.created)) || b.created - a.created).map(b => {
+        const c = calc(b), [yy, mm, dd] = (b.date || iso(b.created)).split('-').map(Number), cu = b.currency || 'MYR';
         let st = '<span class="m">no payer yet</span>';
         if (me && b.payer) {
           if (b.payer === me) { const lent = Object.entries(c.per).reduce((s, [n, v]) => n === me ? s : s + v, 0); st = lent > 0.005 ? `<span class="pos">you lent<b>${fmt(lent, cu)}</b></span>` : '<span class="m">not involved</span>'; }
           else if (c.per[me]) st = `<span class="neg">you borrowed<b>${fmt(c.per[me], cu)}</b></span>`;
           else st = '<span class="m">not involved</span>';
         }
-        return `<a class="row ex" href="#/b/${esc(b._id)}"><span class="dt">${mon[d.getMonth()]}<br><b>${d.getDate()}</b></span><span class="n"><b>${esc(b.name)}</b><br><span class="m">${b.payer ? esc(b.payer === me ? 'You' : b.payer) + ' paid ' + fmt(c.total, cu) : fmt(c.total, cu)}</span></span><span class="st">${st}</span></a>`;
+        return `<a class="row ex" href="#/b/${esc(b._id)}"><span class="dt">${mon[mm - 1]}<br><b>${dd}</b>${yy !== new Date().getFullYear() ? '<br>' + yy : ''}</span><span class="n"><b>${esc(b.name)}</b><br><span class="m">${b.payer ? esc(b.payer === me ? 'You' : b.payer) + ' paid ' + fmt(c.total, cu) : fmt(c.total, cu)}</span></span><span class="st">${st}</span></a>`;
       }).join('') || '<p class="m">No expenses yet. Tap Add expense to record the first one.</p>';
       body = `<div class="card">${body}</div>`;
     } else if (tab === 'b') {
@@ -300,7 +306,8 @@ function viewTrip(id) {
           const rc1 = rows.reduce((a, r) => a + r.s.r1, 0) >= rows.reduce((a, r) => a + r.s.r2, 0), eff = x => rc1 ? x.t1 / x.t2 : x.t2 / x.t1;
           rows.sort((a, b) => eff(b.s) - eff(a.s));
           const s0 = rows[0].s;
-          return `<div class="dd"><table class="tb"><tr><th>Name</th><th>Rate</th><th>Converted</th><th>Sources</th></tr>${rows.map((r, i) => { const x = dir(r.s, k); return `<tr class="${i === 0 && rows.length > 1 ? 'pos' : ''}"><td>${esc(r.n)}${i === 0 && rows.length > 1 ? ' (best)' : ''}</td><td>${(x.tt / x.ft).toPrecision(6)}</td><td>${fmt(x.ft, x.f)}</td><td>${r.s.e + r.s.c}</td></tr>`; }).join('')}</table><p class="m">Best means the most ${rc1 ? s0.c1 : s0.c2} received per ${rc1 ? s0.c2 : s0.c1} paid.</p></div>`;
+          const g = rows.reduce((m, r) => ({ c1: r.s.c1, c2: r.s.c2, t1: m.t1 + r.s.t1, t2: m.t2 + r.s.t2, n: m.n + r.s.e + r.s.c }), { t1: 0, t2: 0, n: 0 }), gx = dir(g, k), h = dir(s0, k);
+          return `<div class="dd"><table class="tb"><tr><th>Name</th><th>Rate</th><th>${h.f}</th><th>${h.t}</th><th>Sources</th></tr>${rows.map((r, i) => { const x = dir(r.s, k); return `<tr class="${i === 0 && rows.length > 1 ? 'pos' : ''}"><td>${esc(r.n)}${i === 0 && rows.length > 1 ? ' (best)' : ''}</td><td>${(x.tt / x.ft).toPrecision(6)}</td><td>${x.ft.toFixed(2)}</td><td>${x.tt.toFixed(2)}</td><td>${r.s.e + r.s.c}</td></tr>`; }).join('')}<tr class="grp"><td>Group</td><td>${(gx.tt / gx.ft).toPrecision(6)}</td><td>${gx.ft.toFixed(2)}</td><td>${gx.tt.toFixed(2)}</td><td>${g.n}</td></tr></table><p class="m">Best means the most ${rc1 ? s0.c1 : s0.c2} received per ${rc1 ? s0.c2 : s0.c1} paid.</p></div>`;
         };
         const mc = (trip.conversions || []).filter(c => c.who === me);
         fxUI = `<div class="card"><h2>Weighted average conversion rate</h2>${keys.length ? keys.map(k => { const x = dir(mine[k], k), s = mine[k]; return `<div class="row"><span class="n"><b>${x.f} to ${x.t} ${(x.tt / x.ft).toPrecision(6)}</b><br><span class="m">${fmt(x.ft, x.f)} from ${s.e} expense${s.e === 1 ? '' : 's'}${s.c ? ', ' + s.c + ' cash' : ''}</span></span><button class="s rnd" data-a="inv" data-k="${k}" aria-label="Invert currency pair">⇄</button><button class="s rnd" data-a="cmp" data-k="${k}" aria-label="Compare with the group">${TBL}</button></div>${cmp === k ? table(k) : ''}`; }).join('') : '<p class="m">No pairs yet. Add an actual amount to an expense you paid, or log a cash conversion below.</p>'}</div>
@@ -354,14 +361,14 @@ async function viewExpense(id, tripId) {
   let trip = null, d = null, created = Date.now(), ui = { menu: false, who: null }, scanning = '';
   const members = () => tripId ? (trip ? trip.members : []) : (d.members || []);
   const back = () => go(tripId ? '/t/' + tripId : '/');
-  const blank = () => ({ name: '', mode: 'whole', cur: 'MYR', amount: '', payer: '', how: 'even', even: [...members()], pct: {}, amt: {}, svc: '', tax: '', fxAmt: '', fxCur: ls.get('fxcur', 'MYR'), items: [{ n: '', p: '', c: [] }] });
+  const blank = () => ({ name: '', mode: 'whole', cur: 'MYR', amount: '', payer: '', how: 'even', even: [...members()], pct: {}, amt: {}, fee: '', date: iso(Date.now()), fxAmt: '', fxCur: ls.get('fxcur', 'MYR'), items: [{ n: '', p: '', c: [] }] });
   try {
     if (id) {
       const s = await db.collection('bills').doc(id).get();
       if (!s.exists) { app.innerHTML = '<div class="card"><b>Expense not found.</b> <a href="#/">Back</a></div>'; return; }
       const b = s.data(); tripId = b.tripId || null; created = b.created || created;
       if (tripId) trip = (await db.collection('trips').doc(tripId).get()).data();
-      d = { name: b.name, mode: b.mode || 'items', cur: b.currency || 'MYR', amount: b.amount ?? '', payer: b.payer || '', how: b.how || 'even', even: b.even || [...(tripId ? trip.members : b.members || [])], pct: b.pct || {}, amt: b.amt || {}, svc: b.svc || '', tax: b.tax || '', fxAmt: b.fx ? b.fx.amt : '', fxCur: b.fx ? b.fx.cur : ls.get('fxcur', 'MYR'), members: b.members || [],
+      d = { name: b.name, mode: b.mode || 'items', cur: b.currency || 'MYR', amount: b.amount ?? '', payer: b.payer || '', how: b.how || 'even', even: b.even || [...(tripId ? trip.members : b.members || [])], pct: b.pct || {}, amt: b.amt || {}, fee: b.fee != null ? (b.fee || '') : (() => { const v = ((1 + (b.svc || 0) / 100) * (1 + (b.tax || 0) / 100) - 1) * 100; return v ? Math.round(v * 10000) / 10000 : ''; })(), date: b.date || iso(b.created || Date.now()), fxAmt: b.fx ? b.fx.amt : '', fxCur: b.fx ? b.fx.cur : ls.get('fxcur', 'MYR'), members: b.members || [],
         items: Object.values(b.items || {}).sort((x, y) => x.o - y.o).map(i => ({ n: i.name, p: i.price, c: [...(i.claims || [])] })) };
       if (!d.items.length) d.items = [{ n: '', p: '', c: [] }];
       if (tripId) addHist('t', tripId, trip.name); else addHist('b', id, b.name);
@@ -377,7 +384,11 @@ async function viewExpense(id, tripId) {
       if (d.how === 'pct') { const s = sumOf(d.pct, M); el.textContent = 'Total ' + r2(s) + '% (' + (s <= 100 ? r2(100 - s) + '% left' : r2(s - 100) + '% over') + ')'; }
       else { const T = parseFloat(d.amount) || 0, s = sumOf(d.amt, M); el.textContent = 'Total ' + fmt(s, d.cur) + ' of ' + fmt(T, d.cur) + ' (' + (s <= T ? fmt(T - s, d.cur) + ' left' : fmt(s - T, d.cur) + ' over') + ')'; }
     }
-    if (tt) { const f = (1 + (parseFloat(d.svc) || 0) / 100) * (1 + (parseFloat(d.tax) || 0) / 100); tt.textContent = 'Total with fees ' + fmt(d.items.reduce((a, r) => a + (parseFloat(r.p) || 0), 0) * f, d.cur); }
+    if (tt) {
+      const sb = d.items.reduce((a, r) => a + (parseFloat(r.p) || 0), 0), f = 1 + (parseFloat(d.fee) || 0) / 100, fl = document.getElementById('feeLine');
+      tt.textContent = 'Total with fees ' + fmt(sb * f, d.cur);
+      if (fl) fl.textContent = 'Adds ' + fmt(sb * (f - 1), d.cur) + ' to ' + fmt(sb, d.cur) + ' of items';
+    }
   };
   const ticks = (M, sel, act) => M.map(m => `<div class="row item" tabindex="0" role="checkbox" aria-checked="${sel.includes(m)}" data-a="${act}" data-n="${esc(m)}"><span class="n">${esc(m)}</span><b>${sel.includes(m) ? '✓' : ''}</b></div>`).join('');
   const draw = () => {
@@ -392,17 +403,18 @@ async function viewExpense(id, tripId) {
     if (w) {
       const tab = (v, t) => `<button class="${d.how === v ? 'on' : ''}" data-a="how" data-v="${v}">${t}</button>`;
       const body = d.how === 'even'
-        ? `<div class="row"><b>Select people</b><button class="s" data-a="all">${M.every(m => d.even.includes(m)) ? 'Unselect all' : 'Select all'}</button></div>` + ticks(M, d.even, 'ev')
+        ? ticks(M, d.even, 'ev')
         : M.map(m => `<div class="row"><span class="n">${esc(m)}</span><input type="number" inputmode="decimal" step="0.01" min="0" style="width:96px" data-f="${d.how}" data-n="${esc(m)}" aria-label="${esc(m)}" value="${d[d.how][m] ?? ''}"><span>${d.how === 'pct' ? '%' : d.cur}</span></div>`).join('') + '<p class="m" id="hint"></p>';
-      main = ui.menu ? `<div class="dd"><div class="seg">${tab('even', 'Evenly')}${tab('pct', 'Percentages')}${tab('amt', 'Unequally')}</div>${body}<div class="bar"><button data-a="menu">Done</button></div></div>` : '';
+      main = ui.menu ? `<div class="dd"><div class="ph"><div class="seg" style="flex:1;margin:0">${tab('even', 'Evenly')}${tab('pct', 'Percentages')}${tab('amt', 'Unequally')}</div><button data-a="menu">Done</button>${d.how === 'even' ? `<div class="ph2"><b>Select people</b><button class="s" data-a="all">${M.every(m => d.even.includes(m)) ? 'Unselect all' : 'Select all'}</button></div>` : ''}</div>${body}</div>` : '';
     } else {
-      main = `<div class="card"><h2>Fees on the whole bill</h2><div class="f"><input type="number" inputmode="decimal" step="0.01" min="0" data-f="svc" placeholder="Service charge %" aria-label="Service charge percent" value="${esc(d.svc)}"><input type="number" inputmode="decimal" step="0.01" min="0" data-f="tax" placeholder="SST / tax %" aria-label="Tax percent" value="${esc(d.tax)}"></div>
-      <h2 style="margin-top:14px">Items</h2>${d.items.map((it, i) => `<div class="f"><input data-f="in" data-i="${i}" placeholder="Item" aria-label="Item name" value="${esc(it.n)}"><input type="number" inputmode="decimal" step="0.01" min="0" style="width:84px" data-f="ip" data-i="${i}" placeholder="Cost" aria-label="Cost" value="${esc(it.p)}"><button class="s" data-a="who" data-i="${i}" aria-label="Who bought this">${HEAD}${it.c.length ? ' ' + it.c.length : ''}</button><button class="x" data-a="rmv" data-i="${i}" aria-label="Remove row">✕</button></div>
-      ${ui.who === i ? `<div class="dd"><div class="row"><b>Who bought this?</b><button class="s" data-a="wa">${M.every(m => it.c.includes(m)) ? 'Unselect all' : 'Select all'}</button></div>${ticks(M, it.c, 'wt')}<div class="bar"><button data-a="wd">Done</button></div></div>` : ''}`).join('')}
+      main = `<div class="card"><h2>Fees on the whole bill</h2><div class="f feebox"><input type="number" inputmode="decimal" step="0.01" min="0" data-f="fee" placeholder="Service charge + taxes" title="Service charge + taxes" aria-label="Service charge plus taxes, percent" value="${esc(d.fee)}"><span class="pct" aria-hidden="true">%</span></div><p class="m" id="feeLine"></p><hr class="sep">
+      <h2 style="margin-top:6px">Items</h2>${d.items.map((it, i) => `<div class="f"><input data-f="in" data-i="${i}" placeholder="Item" aria-label="Item name" value="${esc(it.n)}"><input type="number" inputmode="decimal" step="0.01" min="0" style="width:84px" data-f="ip" data-i="${i}" placeholder="Cost" aria-label="Cost" value="${esc(it.p)}"><button class="s" data-a="who" data-i="${i}" aria-label="Who bought this">${HEAD}${it.c.length ? ' ' + it.c.length : ''}</button><button class="x" data-a="rmv" data-i="${i}" aria-label="Remove row">✕</button></div>
+      ${ui.who === i ? `<div class="dd"><div class="ph"><b>Who bought this?</b><span><button class="s" data-a="wa">${M.every(m => it.c.includes(m)) ? 'Unselect all' : 'Select all'}</button> <button data-a="wd">Done</button></span></div>${ticks(M, it.c, 'wt')}</div>` : ''}`).join('')}
       <div class="bar"><button class="s" data-a="addrow">+ Add row</button><button class="s" data-a="cam">Scan receipt</button><button class="s" data-a="gal">From gallery</button></div><p class="m" id="scm">${esc(scanning)}</p><p class="m" id="tot"></p></div>`;
     }
     const fxCard = `<div class="card"><h2>Actual amount charged (optional)</h2><p class="m">What your card or bank really charged, in another currency. It only feeds your conversion rate on the Members page and never changes the split.</p><div class="f"><input type="number" inputmode="decimal" step="0.01" min="0" data-f="fxAmt" placeholder="Amount" aria-label="Actual amount charged" value="${esc(d.fxAmt)}"><select data-f="fxCur" aria-label="Currency charged">${CURS.map(c => `<option ${c === d.fxCur ? 'selected' : ''}>${c}</option>`).join('')}</select></div></div>`;
-    app.innerHTML = `<div class="hd"><a href="${tripId ? '#/t/' + esc(tripId) : '#/'}">‹ ${tripId ? 'Group' : 'Groups'}</a><h1>${id ? 'Edit expense' : 'Add expense'}</h1></div>${top}${head}${main}${fxCard}
+    const dateCard = `<div class="card"><h2>Date</h2><input class="w" type="date" data-f="date" aria-label="Expense date" value="${esc(d.date)}"></div>`;
+    app.innerHTML = `<div class="hd"><a href="${tripId ? '#/t/' + esc(tripId) : '#/'}">‹ ${tripId ? 'Group' : 'Groups'}</a><h1>${id ? 'Edit expense' : 'Add expense'}</h1></div>${top}${head}${main}${fxCard}${dateCard}
     <div class="bar"><button data-a="save">Save expense</button>${id ? '<button class="s" data-a="del">Delete</button>' : ''}</div>`;
     hint();
   };
@@ -410,7 +422,8 @@ async function viewExpense(id, tripId) {
     const name = d.name.trim(), M = members();
     if (!name) return alert('Enter a description.');
     if (!d.payer) return alert('Choose who paid.');
-    const o = { name, tripId: tripId || null, currency: d.cur, mode: d.mode, payer: d.payer, created, items: {}, svc: 0, tax: 0 };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d.date)) return alert('Choose a date.');
+    const o = { name, tripId: tripId || null, currency: d.cur, mode: d.mode, payer: d.payer, created, date: d.date, items: {}, svc: 0, tax: 0 };
     if (!tripId) o.members = M;
     if (d.mode === 'whole') {
       const T = parseFloat(d.amount);
@@ -423,7 +436,7 @@ async function viewExpense(id, tripId) {
       const rows = d.items.filter(r => r.n.trim() && parseFloat(r.p) >= 0);
       if (!rows.length) return alert('Add at least one item with a name and cost.');
       rows.forEach((r, i) => { o.items[rid()] = { name: r.n.trim(), price: parseFloat(r.p), claims: r.c, o: i }; });
-      o.svc = parseFloat(d.svc) || 0; o.tax = parseFloat(d.tax) || 0;
+      o.fee = parseFloat(d.fee) || 0;
     }
     if (String(d.fxAmt).trim() !== '') {
       const fa = parseFloat(d.fxAmt);
@@ -452,15 +465,16 @@ async function viewExpense(id, tripId) {
     draw();
   };
   scanHook = scanFile;
+  const scrollDD = () => setTimeout(() => { const e = document.querySelector('.dd'); if (e) e.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, 0);
   const tg = (arr, n) => { const i = arr.indexOf(n); if (i < 0) arr.push(n); else arr.splice(i, 1); };
   draw();
   on({
     mode: el => { d.mode = el.dataset.v; ui = { menu: false, who: null }; draw(); },
-    menu: () => { ui.menu = !ui.menu; draw(); },
+    menu: () => { ui.menu = !ui.menu; draw(); if (ui.menu) scrollDD(); },
     how: el => { d.how = el.dataset.v; draw(); },
     all: () => { const M = members(); d.even = M.every(m => d.even.includes(m)) ? [] : [...M]; draw(); },
     ev: el => { tg(d.even, el.dataset.n); draw(); },
-    who: el => { const i = +el.dataset.i; ui.who = ui.who === i ? null : i; draw(); },
+    who: el => { const i = +el.dataset.i; ui.who = ui.who === i ? null : i; draw(); if (ui.who !== null) scrollDD(); },
     wt: el => { tg(d.items[ui.who].c, el.dataset.n); draw(); },
     wa: () => { const M = members(), it = d.items[ui.who]; it.c = M.every(m => it.c.includes(m)) ? [] : [...M]; draw(); },
     wd: () => { ui.who = null; draw(); },
@@ -481,7 +495,10 @@ async function viewExpense(id, tripId) {
     hint();
   };
   app.onchange = e => { const t = e.target; if (t.tagName === 'SELECT' && t.dataset.f) { d[t.dataset.f] = t.value; draw(); } };
-  app.onkeydown = e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('item')) { e.preventDefault(); e.target.click(); } };
+  app.onkeydown = e => {
+    if (e.key === 'Escape' && (ui.menu || ui.who !== null)) { ui.menu = false; ui.who = null; draw(); return; }
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('item')) { e.preventDefault(); e.target.click(); }
+  };
 }
 
 // ---------- start ----------
