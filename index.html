@@ -335,11 +335,11 @@ function viewTrip(id) {
       ref.update({ conversions: FV.arrayUnion({ id: rid(), who: me, buyCur: cv.bc, buyAmt: ba, payCur: cv.pc, payAmt: pa, t: Date.now() }) });
       cv.ba = ''; cv.pa = ''; draw();
     },
-    cd: el => { const c = (trip.conversions || []).find(x => x.id === el.dataset.id); if (c && confirm('Delete this conversion?')) ref.update({ conversions: FV.arrayRemove(c) }); },
+    cd: el => { const c = (trip.conversions || []).find(x => x.id === el.dataset.id); if (c) ref.update({ conversions: FV.arrayRemove(c) }); },
     nb: () => go('/n/' + id),
     cl: el => copy(link('t', id), el),
     am: () => { const n = (prompt('Name') || '').trim(); if (n) ref.update({ members: FV.arrayUnion(n) }); },
-    st: el => { if (confirm(el.dataset.f + ' paid ' + el.dataset.t + ' ' + fmt(+el.dataset.v, el.dataset.c) + '?')) ref.update({ settlements: FV.arrayUnion({ from: el.dataset.f, to: el.dataset.t, amt: +el.dataset.v, cur: el.dataset.c, t: Date.now() }) }); },
+    st: el => { ref.update({ settlements: FV.arrayUnion({ from: el.dataset.f, to: el.dataset.t, amt: +el.dataset.v, cur: el.dataset.c, t: Date.now() }) }); },
     us: el => { const s = (trip.settlements || [])[+el.dataset.i]; if (s && confirm('Undo this payment?')) ref.update({ settlements: FV.arrayRemove(s) }); }
   });
   app.oninput = e => { const f = e.target.dataset.f; if (f) cv[f] = e.target.value; };
@@ -422,7 +422,6 @@ async function viewExpense(id, tripId) {
     } else {
       const rows = d.items.filter(r => r.n.trim() && parseFloat(r.p) >= 0);
       if (!rows.length) return alert('Add at least one item with a name and cost.');
-      if (rows.some(r => !r.c.length) && !confirm('Some items have nobody assigned and will not be split. Save anyway?')) return;
       rows.forEach((r, i) => { o.items[rid()] = { name: r.n.trim(), price: parseFloat(r.p), claims: r.c, o: i }; });
       o.svc = parseFloat(d.svc) || 0; o.tax = parseFloat(d.tax) || 0;
     }
