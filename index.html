@@ -239,7 +239,7 @@ function viewHome() {
   on({
     nt: () => { const n = prompt('Group name (e.g. Langkawi 2026)'); if (!n) return; const id = rid(); db.collection('trips').doc(id).set({ name: n.trim(), members: [], settlements: [], created: Date.now() }).then(() => go('/t/' + id)); },
     nb: () => go('/n/-'),
-    rm: el => { ls.set('hist', ls.get('hist', []).filter(x => x.id !== el.dataset.id)); viewHome(); },
+    rm: el => { const h0 = ls.get('hist', []).find(x => x.id === el.dataset.id); if (!confirm('Remove "' + (h0 ? h0.name : 'this item') + '" from your list? The saved link will still open it.')) return; ls.set('hist', ls.get('hist', []).filter(x => x.id !== el.dataset.id)); viewHome(); },
     bk: el => copy(ls.get('hist', []).map(x => x.name + ': ' + link(x.t, x.id)).join('\n'), el)
   });
 }
