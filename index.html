@@ -55,6 +55,8 @@ a.ex,.row.ex{color:var(--ink);text-decoration:none;font-weight:400}a.n.ex{displa
 .feebox{align-items:center}.feebox input{flex:1;width:auto}.pct{font-weight:800;font-size:1.1rem;color:var(--mute);padding:0 4px}
 .sep{border:0;border-top:2px solid var(--line);margin:14px 0 10px}
 .tb tr.grp td{font-weight:800;border-top:2px solid var(--ink)}
+.ov{position:fixed;inset:0;background:rgba(51,30,29,.55);display:grid;place-items:center;z-index:20;padding:16px}
+.mb{background:var(--paper);border-radius:24px;padding:18px;max-width:380px;width:100%;box-shadow:0 10px 30px rgba(0,0,0,.35)}
 </style>
 </head>
 <body>
@@ -288,7 +290,7 @@ function viewTrip(id) {
           else if (c.per[me]) st = `<span class="neg">you borrowed<b>${fmt(c.per[me], cu)}</b></span>`;
           else st = '<span class="m">not involved</span>';
         }
-        return `<a class="row ex" href="#/b/${esc(b._id)}"><span class="dt">${mon[mm - 1]}<br><b>${dd}</b>${yy !== new Date().getFullYear() ? '<br>' + yy : ''}</span><span class="n"><b>${esc(b.name)}</b><br><span class="m">${b.payer ? esc(b.payer === me ? 'You' : b.payer) + ' paid ' + fmt(c.total, cu) : fmt(c.total, cu)}</span></span><span class="st">${st}</span></a>`;
+        return `<a class="row ex" href="#/b/${esc(b._id)}"><span class="dt">${mon[mm - 1]}<br><b>${dd}</b>${yy !== new Date().getFullYear() ? '<br>' + yy : ''}</span><span class="n"><b>${esc(b.name)}</b>${b.lock ? ' <span class="tag">Locked</span>' : ''}<br><span class="m">${b.payer ? esc(b.payer === me ? 'You' : b.payer) + ' paid ' + fmt(c.total, cu) : fmt(c.total, cu)}</span></span><span class="st">${st}</span></a>`;
       }).join('') || '<p class="m">No expenses yet. Tap Add expense to record the first one.</p>';
       body = `<div class="card">${body}</div>`;
     } else if (tab === 'b') {
@@ -353,24 +355,51 @@ function viewTrip(id) {
   app.onchange = e => { const f = e.target.dataset.f; if (f && e.target.tagName === 'SELECT') cv[f] = e.target.value; };
 }
 
+// ---------- password lock ----------
+const b2h = u => [...new Uint8Array(u)].map(x => x.toString(16).padStart(2, '0')).join('');
+const h2b = h => new Uint8Array(h.match(/../g).map(x => parseInt(x, 16)));
+async function hashPw(pw, saltHex) {
+  const salt = saltHex ? h2b(saltHex) : crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 150000, hash: 'SHA-256' }, key, 256);
+  return { salt: b2h(salt), hash: b2h(bits), it: 150000 };
+}
+function modal({ title, msg, fields = [], ok = 'OK', noCancel = false }) {
+  return new Promise(res => {
+    const ov = document.createElement('div'); ov.className = 'ov';
+    ov.innerHTML = `<div class="mb" role="dialog" aria-modal="true" aria-label="${esc(title)}"><h2>${esc(title)}</h2><p class="m">${esc(msg || '')}</p>${fields.map((f, i) => `<input class="w" type="password" data-k="${i}" placeholder="${esc(f)}" aria-label="${esc(f)}" autocomplete="off">`).join('')}${fields.length ? '<label class="m"><input type="checkbox" data-show style="width:auto"> Show password</label>' : ''}<div class="bar"><button data-ok>${esc(ok)}</button>${noCancel ? '' : '<button class="s" data-no>Cancel</button>'}</div></div>`;
+    const done = v => { document.removeEventListener('keydown', kd, true); ov.remove(); res(v); };
+    const go_ = () => done(fields.length ? [...ov.querySelectorAll('input[data-k]')].map(i => i.value) : true);
+    const kd = e => { if (e.key === 'Escape') done(null); else if (e.key === 'Enter') { e.preventDefault(); go_(); } };
+    ov.querySelector('[data-ok]').onclick = go_;
+    const no = ov.querySelector('[data-no]'); if (no) no.onclick = () => done(null);
+    const sh = ov.querySelector('[data-show]'); if (sh) sh.onchange = () => ov.querySelectorAll('input[data-k]').forEach(i => i.type = sh.checked ? 'text' : 'password');
+    document.addEventListener('keydown', kd, true);
+    document.body.appendChild(ov);
+    (ov.querySelector('input[data-k]') || ov.querySelector('[data-ok]')).focus();
+  });
+}
+const errBox = m => modal({ title: 'Error', msg: m, noCancel: true });
+
 // ---------- expense (add / edit) ----------
 const HEAD = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z"/></svg>';
 const r2 = x => Math.round(x * 100) / 100;
 const sumOf = (o, M) => M.reduce((a, m) => a + (+o[m] || 0), 0);
 async function viewExpense(id, tripId) {
-  let trip = null, d = null, created = Date.now(), ui = { menu: false, who: null }, scanning = '';
+  let trip = null, d = null, created = Date.now(), ui = { menu: false, who: null }, scanning = '', bill = null, ro = false, tries = 0, pause = 0;
   const members = () => tripId ? (trip ? trip.members : []) : (d.members || []);
   const back = () => go(tripId ? '/t/' + tripId : '/');
-  const blank = () => ({ name: '', mode: 'whole', cur: 'MYR', amount: '', payer: '', how: 'even', even: [...members()], pct: {}, amt: {}, fee: '', date: iso(Date.now()), fxAmt: '', fxCur: ls.get('fxcur', 'MYR'), items: [{ n: '', p: '', c: [] }] });
+  const blank = () => ({ name: '', mode: 'whole', cur: 'MYR', amount: '', payer: '', how: 'even', even: [...members()], pct: {}, amt: {}, fee: '', lock: null, date: iso(Date.now()), fxAmt: '', fxCur: ls.get('fxcur', 'MYR'), items: [{ n: '', p: '', c: [] }] });
   try {
     if (id) {
       const s = await db.collection('bills').doc(id).get();
       if (!s.exists) { app.innerHTML = '<div class="card"><b>Expense not found.</b> <a href="#/">Back</a></div>'; return; }
       const b = s.data(); tripId = b.tripId || null; created = b.created || created;
       if (tripId) trip = (await db.collection('trips').doc(tripId).get()).data();
-      d = { name: b.name, mode: b.mode || 'items', cur: b.currency || 'MYR', amount: b.amount ?? '', payer: b.payer || '', how: b.how || 'even', even: b.even || [...(tripId ? trip.members : b.members || [])], pct: b.pct || {}, amt: b.amt || {}, fee: b.fee != null ? (b.fee || '') : (() => { const v = ((1 + (b.svc || 0) / 100) * (1 + (b.tax || 0) / 100) - 1) * 100; return v ? Math.round(v * 10000) / 10000 : ''; })(), date: b.date || iso(b.created || Date.now()), fxAmt: b.fx ? b.fx.amt : '', fxCur: b.fx ? b.fx.cur : ls.get('fxcur', 'MYR'), members: b.members || [],
+      d = { name: b.name, mode: b.mode || 'items', cur: b.currency || 'MYR', amount: b.amount ?? '', payer: b.payer || '', how: b.how || 'even', even: b.even || [...(tripId ? trip.members : b.members || [])], pct: b.pct || {}, amt: b.amt || {}, fee: b.fee != null ? (b.fee || '') : (() => { const v = ((1 + (b.svc || 0) / 100) * (1 + (b.tax || 0) / 100) - 1) * 100; return v ? Math.round(v * 10000) / 10000 : ''; })(), lock: b.lock || null, date: b.date || iso(b.created || Date.now()), fxAmt: b.fx ? b.fx.amt : '', fxCur: b.fx ? b.fx.cur : ls.get('fxcur', 'MYR'), members: b.members || [],
         items: Object.values(b.items || {}).sort((x, y) => x.o - y.o).map(i => ({ n: i.name, p: i.price, c: [...(i.claims || [])] })) };
       if (!d.items.length) d.items = [{ n: '', p: '', c: [] }];
+      bill = b; ro = !!b.lock;
       if (tripId) addHist('t', tripId, trip.name); else addHist('b', id, b.name);
     } else {
       if (tripId) { const t = await db.collection('trips').doc(tripId).get(); if (!t.exists) { app.innerHTML = '<div class="card"><b>Group not found.</b> <a href="#/">Back</a></div>'; return; } trip = t.data(); if (!trip.members.length) { alert('Add people to the group first.'); return back(); } d = blank(); }
@@ -391,7 +420,15 @@ async function viewExpense(id, tripId) {
     }
   };
   const ticks = (M, sel, act) => M.map(m => `<div class="row item" tabindex="0" role="checkbox" aria-checked="${sel.includes(m)}" data-a="${act}" data-n="${esc(m)}"><span class="n">${esc(m)}</span><b>${sel.includes(m) ? '✓' : ''}</b></div>`).join('');
+  const drawRO = () => {
+    const c = calc(bill), cu = bill.currency || 'MYR', items = Object.values(bill.items || {}).sort((x, y) => x.o - y.o);
+    app.innerHTML = `<div class="hd"><a href="${tripId ? '#/t/' + esc(tripId) : '#/'}">‹ ${tripId ? 'Group' : 'Groups'}</a><h1>${esc(bill.name)} <span class="tag">Locked</span></h1><p class="m">${fmt(c.total, cu)}, paid by ${esc(bill.payer || 'nobody yet')}, ${esc(d.date)}</p></div>
+    <div class="card"><h2>Who owes what</h2>${Object.entries(c.per).map(([n, v]) => `<div class="row"><span class="n">${esc(n)}</span><span class="amt">${fmt(v, cu)}</span></div>`).join('') || '<p class="m">Nobody assigned yet.</p>'}</div>
+    ${bill.mode !== 'whole' && items.length ? `<div class="card"><h2>Items</h2>${items.map(i => `<div class="row"><span class="n">${esc(i.name)}<br><span class="m">${esc((i.claims || []).join(', ') || 'unassigned')}</span></span><span class="amt">${fmt(i.price, cu)}</span></div>`).join('')}</div>` : ''}
+    <div class="card"><p class="m">This expense is locked. Settling up and undoing payments still work for everyone.</p><div class="bar"><button data-a="ed">Edit</button></div></div>`;
+  };
   const draw = () => {
+    if (ro) return drawRO();
     const M = members(), w = d.mode === 'whole';
     const tog = (m, t) => `<button class="${d.mode === m ? 'on' : ''}" data-a="mode" data-v="${m}">${t}</button>`;
     const top = `<div class="row"><div class="seg" style="flex:1;margin:0">${tog('whole', 'Entire bill')}${tog('items', 'By item')}</div><select data-f="cur" aria-label="Currency">${CURS.map(c => `<option ${c === d.cur ? 'selected' : ''}>${c}</option>`).join('')}</select></div>`;
@@ -415,7 +452,7 @@ async function viewExpense(id, tripId) {
     const fxCard = `<div class="card"><h2>Actual amount charged (optional)</h2><p class="m">What your card or bank really charged, in another currency. It only feeds your conversion rate on the Members page and never changes the split.</p><div class="f"><input type="number" inputmode="decimal" step="0.01" min="0" data-f="fxAmt" placeholder="Amount" aria-label="Actual amount charged" value="${esc(d.fxAmt)}"><select data-f="fxCur" aria-label="Currency charged">${CURS.map(c => `<option ${c === d.fxCur ? 'selected' : ''}>${c}</option>`).join('')}</select></div></div>`;
     const dateCard = `<div class="card"><h2>Date</h2><input class="w" type="date" data-f="date" aria-label="Expense date" value="${esc(d.date)}"></div>`;
     app.innerHTML = `<div class="hd"><a href="${tripId ? '#/t/' + esc(tripId) : '#/'}">‹ ${tripId ? 'Group' : 'Groups'}</a><h1>${id ? 'Edit expense' : 'Add expense'}</h1></div>${top}${head}${main}${fxCard}${dateCard}
-    <div class="bar"><button data-a="save">Save expense</button>${id ? '<button class="s" data-a="del">Delete</button>' : ''}</div>`;
+    <div class="bar"><button data-a="save">Save expense</button>${d.lock ? '<button class="s" data-a="lk">Change password</button><button class="s" data-a="rl">Remove lock</button>' : '<button class="s" data-a="lk">Lock expense</button>'}${id ? '<button class="s" data-a="del">Delete</button>' : ''}</div>`;
     hint();
   };
   const save = async () => {
@@ -425,6 +462,7 @@ async function viewExpense(id, tripId) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d.date)) return alert('Choose a date.');
     const o = { name, tripId: tripId || null, currency: d.cur, mode: d.mode, payer: d.payer, created, date: d.date, items: {}, svc: 0, tax: 0 };
     if (!tripId) o.members = M;
+    if (d.lock) o.lock = d.lock;
     if (d.mode === 'whole') {
       const T = parseFloat(d.amount);
       if (!(T > 0)) return alert('Enter the bill amount.');
@@ -467,8 +505,27 @@ async function viewExpense(id, tripId) {
   scanHook = scanFile;
   const scrollDD = () => setTimeout(() => { const e = document.querySelector('.dd'); if (e) e.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, 0);
   const tg = (arr, n) => { const i = arr.indexOf(n); if (i < 0) arr.push(n); else arr.splice(i, 1); };
+  const lk = async () => {
+    if (!window.crypto || !crypto.subtle) return errBox('Locking needs a secure (https) page.');
+    const v = await modal({ title: d.lock ? 'Change password' : 'Lock expense', msg: 'Choose a password. Anyone who knows it can edit this expense, and there is no recovery if it is forgotten. The lock stops accidental edits but is not bank-grade security.', fields: ['Password', 'Confirm password'], ok: 'Lock' });
+    if (!v) return;
+    if (v[0].length < 4) return errBox('The password must be at least 4 characters.');
+    if (v[0] !== v[1]) return errBox('The two passwords do not match.');
+    d.lock = await hashPw(v[0]);
+    if (id) await save(); else draw();
+  };
+  const rl = () => { d.lock = null; if (id) save(); else draw(); };
+  const ed = async () => {
+    const left = pause - Date.now();
+    if (left > 0) return errBox('Too many wrong attempts. Try again in ' + Math.ceil(left / 1000) + ' seconds.');
+    const v = await modal({ title: 'Enter password', msg: 'This expense is locked.', fields: ['Password'], ok: 'Unlock' });
+    if (!v) return;
+    if ((await hashPw(v[0], bill.lock.salt)).hash === bill.lock.hash) { ro = false; tries = 0; draw(); }
+    else { tries++; if (tries >= 5) { pause = Date.now() + 30000; tries = 0; } errBox('Incorrect password.'); }
+  };
   draw();
   on({
+    lk, rl, ed,
     mode: el => { d.mode = el.dataset.v; ui = { menu: false, who: null }; draw(); },
     menu: () => { ui.menu = !ui.menu; draw(); if (ui.menu) scrollDD(); },
     how: el => { d.how = el.dataset.v; draw(); },
