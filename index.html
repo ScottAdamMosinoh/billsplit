@@ -104,12 +104,22 @@ body{padding-bottom:150px}
   }
   apply(cur());
   document.getElementById('gear').onclick = function () {
+    var g = window.__grp && /^#\/t\//.test(location.hash) ? window.__grp : null;
+    function grpHtml() {
+      if (!g) return '';
+      return '<h2 style="margin-top:16px">Group settings</h2><p class="m">Default currency for new expenses in this group</p><select class="w" data-gcur aria-label="Default currency">' + g.curs.map(function (c) { return '<option' + (c === g.cur ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select><p class="m" data-gmsg style="min-height:1.2em;margin:2px 0 6px"></p>';
+    }
     var ov = document.createElement('div'); ov.className = 'ov';
-    ov.innerHTML = '<div class="mb" role="dialog" aria-modal="true" aria-label="Settings"><h2>Settings</h2><p class="m">Appearance</p><div class="seg"><button data-t="light">Light</button><button data-t="dark">Dark</button></div><div class="bar" style="justify-content:flex-end"><button data-close>Done</button></div></div>';
+    ov.innerHTML = '<div class="mb" role="dialog" aria-modal="true" aria-label="Settings"><h2>Settings</h2><p class="m">Appearance</p><div class="seg"><button data-t="light">Light</button><button data-t="dark">Dark</button></div>' + grpHtml() + '<div class="bar" style="justify-content:flex-end"><button data-close>Done</button></div></div>';
     function mark() { ov.querySelectorAll('[data-t]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-t') === cur()); }); }
     function close() { document.removeEventListener('keydown', kd, true); ov.remove(); }
     function kd(e) { if (e.key === 'Escape') close(); }
     ov.querySelectorAll('[data-t]').forEach(function (b) { b.onclick = function () { apply(b.getAttribute('data-t')); mark(); }; });
+    var gs = ov.querySelector('[data-gcur]');
+    if (gs) gs.onchange = function () {
+      var m = ov.querySelector('[data-gmsg]'); m.textContent = 'Saving...';
+      Promise.resolve(g.set(gs.value)).then(function () { g.cur = gs.value; m.textContent = 'Saved. New expenses will start in ' + gs.value + '.'; }, function () { m.textContent = 'Could not save. Check your connection.'; gs.value = g.cur; });
+    };
     ov.querySelector('[data-close]').onclick = close;
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
     document.addEventListener('keydown', kd, true);
@@ -269,7 +279,7 @@ function parseReceipt(text) {
 let db, FV, unsubs = [], scanHook = null;
 const sub = (ref, fn) => unsubs.push(ref.onSnapshot(fn, e => { app.innerHTML = '<div class="card"><b>Could not load.</b><p class="m">' + esc(e.message) + '</p><a href="#/">Back</a></div>'; }));
 function route() {
-  unsubs.forEach(u => u()); unsubs = []; scanHook = null;
+  unsubs.forEach(u => u()); unsubs = []; scanHook = null; window.__grp = null;
   app.onclick = app.onchange = app.oninput = app.onkeydown = null;
   const [, t, id] = location.hash.split('/');
   if (t === 't' && id) viewTrip(id);
@@ -398,7 +408,7 @@ function viewTrip(id) {
     ${body}<div class="nav">${seg('x', 'Expenses', '🧾')}${seg('b', 'Balances', '⚖️')}${seg('m', 'Members', '👥')}</div>
     <button class="fab" data-a="nb">+ Add expense</button>`;
   };
-  sub(ref, d => { trip = d.exists ? d.data() : false; if (trip) addHist('t', id, trip.name); draw(); });
+  sub(ref, d => { trip = d.exists ? d.data() : false; window.__grp = trip ? { cur: trip.defaultCur || 'MYR', curs: CURS, set: v => ref.update({ defaultCur: v }) } : null; if (trip) addHist('t', id, trip.name); draw(); });
   sub(db.collection('bills').where('tripId', '==', id), q => { bills = q.docs.map(d => ({ ...d.data(), _id: d.id })); draw(); });
   on({
     tab: el => { tab = el.dataset.v; draw(); },
@@ -486,7 +496,7 @@ async function viewExpense(id, tripId) {
   let trip = null, d = null, created = Date.now(), ui = { menu: false, who: null }, scanning = '', bill = null, ro = false, tries = 0, pause = 0;
   const members = () => tripId ? (trip ? trip.members : []) : (d.members || []);
   const back = () => go(tripId ? '/t/' + tripId : '/');
-  const blank = () => ({ name: '', mode: 'whole', cur: 'MYR', amount: '', payer: '', how: 'even', even: [...members()], pct: {}, amt: {}, fee: '', lock: null, date: iso(Date.now()), fxAmt: '', fxCur: ls.get('fxcur', 'MYR'), items: [{ n: '', p: '', c: [] }] });
+  const blank = () => ({ name: '', mode: 'whole', cur: (trip && trip.defaultCur) || 'MYR', amount: '', payer: '', how: 'even', even: [...members()], pct: {}, amt: {}, fee: '', lock: null, date: iso(Date.now()), fxAmt: '', fxCur: ls.get('fxcur', 'MYR'), items: [{ n: '', p: '', c: [] }] });
   try {
     if (id) {
       const s = await db.collection('bills').doc(id).get();
