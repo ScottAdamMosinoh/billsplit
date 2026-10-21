@@ -415,7 +415,14 @@ function viewTrip(id) {
     cl: el => copy(link('t', id), el),
     am: () => { const n = (prompt('Name') || '').trim(); if (n) ref.update({ members: FV.arrayUnion(n) }); },
     st: el => { ref.update({ settlements: FV.arrayUnion({ from: el.dataset.f, to: el.dataset.t, amt: +el.dataset.v, cur: el.dataset.c, t: Date.now() }) }); },
-    us: el => { const s = (trip.settlements || [])[+el.dataset.i]; if (s && confirm('Undo this payment?')) ref.update({ settlements: FV.arrayRemove(s) }); }
+    us: async el => {
+      const list = trip.settlements || [], i = +el.dataset.i, s = list[i];
+      if (!s) return;
+      const ok = await modal({ title: 'Undo this payment?', msg: s.from + ' paid ' + s.to + ' ' + fmt(s.amt, s.cur) + '. This puts the amount back on the balances.', ok: 'Undo' });
+      if (!ok) return;
+      try { await ref.update({ settlements: list.filter((_, k) => k !== i) }); }
+      catch (e) { errBox('Could not undo the payment. Check your connection and try again.'); }
+    }
   });
   app.oninput = e => { const f = e.target.dataset.f; if (f) cv[f] = e.target.value; };
   app.onchange = e => { const f = e.target.dataset.f; if (f && e.target.tagName === 'SELECT') cv[f] = e.target.value; };
