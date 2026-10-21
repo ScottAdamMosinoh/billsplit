@@ -7,7 +7,18 @@
 <title>Split the bill</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script>try{if(localStorage.getItem('theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
+<script>try{if(localStorage.getItem('theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}
+window.__accent=function(){try{var r=document.documentElement,hex=localStorage.getItem('accent')||'',keys=['--bg','--paper','--ink','--mute','--line','--acc','--accbg','--onacc','--hd','--hd2'];
+if(!/^#[0-9a-fA-F]{6}$/.test(hex)){keys.forEach(function(k){r.style.removeProperty(k)});return}
+var n=parseInt(hex.slice(1),16),R=(n>>16&255)/255,G=(n>>8&255)/255,B=(n&255)/255,mx=Math.max(R,G,B),mn=Math.min(R,G,B),l=(mx+mn)/2,d=mx-mn,s=d?d/(1-Math.abs(2*l-1)):0,h=0;
+if(d){h=mx===R?((G-B)/d)%6:mx===G?(B-R)/d+2:(R-G)/d+4;h=Math.round(h*60);if(h<0)h+=360}
+var g=d<.04;s=g?0:Math.round(Math.max(.3,s)*100);var S=function(x){return g?0:x};
+var dk=r.getAttribute('data-theme')==='dark',H=function(a,b,c){return 'hsl('+((a%360+360)%360)+','+b+'%,'+c+'%)'},v;
+if(dk){v={'--bg':H(h,S(30),9),'--paper':H(h,S(28),15),'--ink':H(h,S(45),86),'--mute':H(h,S(22),68),'--line':H(h,S(22),26),'--acc':H(h,Math.min(s,75),72),'--accbg':H(h,S(30),22),'--onacc':H(h,S(35),12),'--hd':H(h,S(45),28),'--hd2':H(h+14,S(50),33)}}
+else{var L=Math.min(Math.round(l*100),42);v={'--bg':H(h,S(55),85),'--paper':H(h,S(70),95),'--ink':H(h,S(30),15),'--mute':H(h,S(25),32),'--line':H(h,S(45),68),'--acc':H(h,s,L),'--accbg':H(h,S(60),80),'--onacc':'#FFF8F2','--hd':H(h,s,L),'--hd2':H(h+14,s,Math.min(L+9,52))}}
+for(var k in v)r.style.setProperty(k,v[k]);
+var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',v['--hd'])}catch(e){}};
+window.__accent();</script>
 <style>
 :root{color-scheme:light;--coral:#E8735A;--teal:#3E9C93;--sun:#EDB445;--hd2:#D2612F;--bg:#F3D1B5;--paper:#FCF0E6;--ink:#331E1D;--mute:#6A4F3A;--line:#E0B485;--acc:#9E3434;--accbg:#F0C9A6;--onacc:#FFF8F2;--warn:#6E4510;--warnbg:#F6DDBA;--bad:#9E3434;--pos:#2F6B3F;--hd:#9E3434;--onhd:#FCF0E6;--sh:rgba(51,30,29,.12)}
 :root[data-theme="dark"]{color-scheme:dark;--bg:#1F1312;--paper:#331E1D;--ink:#F3D1B5;--mute:#C2A184;--line:#4F3430;--acc:#E0B485;--accbg:#4A2F26;--onacc:#331E1D;--warn:#E0B485;--warnbg:#4A3524;--bad:#E58A80;--pos:#8FD6A0;--hd:#7F2B2B;--hd2:#A8431F;--coral:#F08A73;--teal:#5CBDB3;--sun:#F2C766;--onhd:#FCE9D8;--sh:rgba(0,0,0,.4)}
@@ -89,6 +100,7 @@ body{padding-bottom:150px}
 .row select{max-width:46%}
 .rad{display:inline-block;width:20px;height:20px;border-radius:50%;box-shadow:inset 0 0 0 2px var(--line);margin-right:10px;vertical-align:-4px;flex:none}.rad.on{background:radial-gradient(var(--acc) 0 42%,transparent 46%);box-shadow:inset 0 0 0 2px var(--acc)}.row .n.tap{padding:4px 0}.row .x{font-size:1.15rem}
 .ph3{display:flex;justify-content:space-between;align-items:center;gap:10px}.ph3 h2{margin:0}
+.sw{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0 4px}.swb{width:34px;height:34px;padding:0;border-radius:50%;box-shadow:0 0 0 1.5px var(--line)}.swb.on{box-shadow:0 0 0 3px var(--bg),0 0 0 5px var(--ink)}.sw input[type=color]{width:44px;height:36px;padding:2px;border-radius:12px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -103,6 +115,7 @@ body{padding-bottom:150px}
     if (t === 'dark') root.setAttribute('data-theme', 'dark'); else root.removeAttribute('data-theme');
     try { localStorage.setItem('theme', t); } catch (e) {}
     var m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute('content', t === 'dark' ? '#7F2B2B' : '#9E3434');
+    if (window.__accent) window.__accent();
   }
   apply(cur());
   document.getElementById('gear').onclick = function () {
@@ -112,7 +125,7 @@ body{padding-bottom:150px}
       return '<h2 style="margin-top:16px">Group settings</h2><p class="m">Default currency for new expenses in this group</p><select class="w" data-gcur aria-label="Default currency">' + g.curs.map(function (c) { return '<option' + (c === g.cur ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select><p class="m" style="margin-top:10px">Header picture</p><div class="bar" style="margin-top:4px"><button data-cpick>Choose photo</button><button class="s" data-crem' + (g.cover ? '' : ' hidden') + '>Remove</button></div><input type="file" accept="image/*" data-cfile hidden><p class="m" data-gmsg style="min-height:1.2em;margin:6px 0 6px"></p>';
     }
     var ov = document.createElement('div'); ov.className = 'ov';
-    ov.innerHTML = '<div class="mb" role="dialog" aria-modal="true" aria-label="Settings"><h2>Settings</h2><p class="m">Appearance</p><div class="seg"><button data-t="light">Light</button><button data-t="dark">Dark</button></div>' + grpHtml() + '<div class="bar" style="justify-content:flex-end"><button data-close>Done</button></div></div>';
+    ov.innerHTML = '<div class="mb" role="dialog" aria-modal="true" aria-label="Settings" style="max-height:88vh;overflow:auto"><h2>Settings</h2><p class="m">Appearance</p><div class="seg"><button data-t="light">Light</button><button data-t="dark">Dark</button></div><p class="m" style="margin-top:12px">Theme colour</p><div class="sw"><button class="swb" data-c="" aria-label="Default colours" title="Default" style="background:linear-gradient(135deg,#F3D1B5 50%,#9E3434 50%)"></button>' + [['#2B6CB0','Ocean'],['#2F7D4F','Forest'],['#7B4BB7','Grape'],['#D6457A','Rose'],['#D9822B','Sunset']].map(function (c) { return '<button class="swb" data-c="' + c[0] + '" aria-label="' + c[1] + '" title="' + c[1] + '" style="background:' + c[0] + '"></button>'; }).join('') + '<input type="color" data-accent aria-label="Pick any colour" value="#9e3434"></div>' + grpHtml() + '<div class="bar" style="justify-content:flex-end"><button data-close>Done</button></div></div>';
     function mark() { ov.querySelectorAll('[data-t]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-t') === cur()); }); }
     function close() { document.removeEventListener('keydown', kd, true); ov.remove(); }
     function kd(e) { if (e.key === 'Escape') close(); }
@@ -153,6 +166,15 @@ body{padding-bottom:150px}
         Promise.resolve(g.setCover(null)).then(function () { g.cover = false; cr.hidden = true; gm.textContent = 'Picture removed.'; }, function () { gm.textContent = 'Could not remove. Check your connection.'; });
       };
     }
+    function acc() { try { return (localStorage.getItem('accent') || '').toLowerCase(); } catch (e) { return ''; } }
+    function markA() {
+      ov.querySelectorAll('[data-c]').forEach(function (b) { b.classList.toggle('on', (b.getAttribute('data-c') || '').toLowerCase() === acc()); });
+      var ci = ov.querySelector('[data-accent]'); if (ci && acc()) ci.value = acc();
+    }
+    function setA(v) { try { if (v) localStorage.setItem('accent', v); else localStorage.removeItem('accent'); } catch (e) {} if (window.__accent) window.__accent(); markA(); }
+    ov.querySelectorAll('[data-c]').forEach(function (b) { b.onclick = function () { setA(b.getAttribute('data-c')); }; });
+    ov.querySelector('[data-accent]').oninput = function (e) { setA(e.target.value); };
+    markA();
     ov.querySelector('[data-close]').onclick = close;
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
     document.addEventListener('keydown', kd, true);
