@@ -138,6 +138,7 @@ input,select,textarea{font-size:max(16px,1rem)}
 .szr{display:flex;align-items:center;gap:12px;margin:6px 0 0}.szr input[type=range]{flex:1;min-width:0;accent-color:var(--acc);height:28px}.szs{display:flex;justify-content:space-between;font-size:.75rem;color:var(--mute);margin-bottom:4px}
 .stg{font-size:16px!important}.stg *{font-size:inherit!important}.stg h2{font-size:20px!important}.stg .m,.stg .szs{font-size:14px!important}.stg button,.stg select{font-size:15px!important}.stg [data-fprev]{font-size:1rem!important}
 .arow.tap{cursor:pointer;border-radius:14px;padding:4px 6px;margin:8px -6px}.arow.tap:active{background:var(--accbg)}a.exr{color:var(--ink);text-decoration:none;font-weight:400}.mb .row .amt{white-space:nowrap}
+.fl{display:block;margin:10px 0 4px;font-size:.85rem}
 </style>
 </head>
 <body>
@@ -378,6 +379,7 @@ async function prepPhoto(file) {
 const SKIP = /total|tax|sst|gst|service|svc|change|cash|round|paid|payment|tender|discount|balance|visa|master|card|invoice|receipt|table|cashier|date|time|tel|phone|thank|amount|qty|item/i;
 const CATS = [['food', '🍽️', 'Food & drink'], ['groceries', '🛒', 'Groceries'], ['transport', '🚕', 'Transport'], ['stay', '🏨', 'Accommodation'], ['fun', '🎟️', 'Activities'], ['shopping', '🛍️', 'Shopping'], ['bills', '💡', 'Bills & utilities'], ['health', '💊', 'Health'], ['cosmetics', '💄', 'Cosmetics'], ['other', '📦', 'Other']];
 const catName = k => { const c = CATS.find(x => x[0] === k); return c ? c[1] + ' ' + c[2] : '❔ Uncategorised'; };
+const catOpts = v => '<option value="">No category</option>' + CATS.map(c => `<option value="${c[0]}" ${v === c[0] ? 'selected' : ''}>${c[1]} ${c[2]}</option>`).join('');
 const CAT_COL = ['var(--coral)', 'var(--sun)', 'var(--teal)', 'var(--acc)', '#9B7BD0', '#6FA8DC', '#B5A642', '#C77DA5', '#E0508A', '#8D7052'];
 const LANGS = [['en', 'English (no translation)', 'eng'], ['zh-CN', 'Chinese (Simplified)', 'chi_sim+eng'], ['zh-TW', 'Chinese (Traditional)', 'chi_tra+eng'], ['ja', 'Japanese', 'jpn+eng'], ['ko', 'Korean', 'kor+eng'], ['th', 'Thai', 'tha+eng'], ['ms', 'Malay', 'eng'], ['id', 'Indonesian', 'eng'], ['vi', 'Vietnamese', 'vie+eng'], ['es', 'Spanish', 'spa+eng'], ['fr', 'French', 'fra+eng'], ['de', 'German', 'deu+eng'], ['it', 'Italian', 'ita+eng'], ['pt', 'Portuguese', 'por+eng']];
 const SKIPX = /合計|合计|总计|總計|小計|小计|消費税|消费税|税等|内税|税|稅|サービス|お釣|釣り|お預|伝票|テーブル|点数|対象|找零|找錢|现金|現金|現計|会計|領収|レシート|日付|電話|电话|합계|소계|부가세|현금|거스름|카드|영수증|ยอดรวม|ภาษี|เงินทอน|เงินสด|ส่วนลด|impuesto|propina|cambio|efectivo|tarjeta|montant|espèces|rendu|summe|mwst|rückgeld|karte|imposta|contanti|totale|troco|dinheiro|cartão|jumlah|baki|tunai|cukai|kembali|tổng|thuế|tiền mặt/i;
@@ -863,6 +865,7 @@ async function viewExpense(id, tripId) {
     app.innerHTML = `<div class="hd"><a href="${tripId ? '#/t/' + esc(tripId) : '#/'}">‹ ${tripId ? 'Group' : 'Groups'}</a><h1>${esc(bill.name)} <span class="tag">Locked</span></h1><p class="m">${fmt(c.total, cu)}, paid by ${esc(bill.payer || 'nobody yet')}, ${esc(d.date)}</p></div>
     <div class="card"><h2>Who owes what</h2>${Object.entries(c.per).map(([n, v]) => `<div class="row"><span class="n">${esc(n)}</span><span class="amt">${fmt(v, cu)}</span></div>`).join('') || '<p class="m">Nobody assigned yet.</p>'}</div>
     ${bill.mode !== 'whole' && items.length ? `<div class="card"><h2>Items</h2>${items.map(i => `<div class="row"><span class="n">${esc(i.name)}<br><span class="m">${esc((i.claims || []).join(', ') || 'unassigned')}</span></span><span class="amt">${fmt(i.price, cu)}</span></div>`).join('')}</div>` : ''}
+    <div class="card"><h2>Category</h2><select class="w" data-f="cat" aria-label="Category">${catOpts(bill.category || '')}</select><p class="m" id="catmsg">Category can be changed even while this expense is locked.</p></div>
     <div class="card"><p class="m">This expense is locked. Settling up and undoing payments still work for everyone.</p><div class="bar"><button data-a="ed">Edit</button></div></div>`;
   };
   const draw = () => {
@@ -871,6 +874,8 @@ async function viewExpense(id, tripId) {
     const tog = (m, t) => `<button class="${d.mode === m ? 'on' : ''}" data-a="mode" data-v="${m}">${t}</button>`;
     const top = `<div class="row"><div class="seg" style="flex:1;margin:0">${tog('whole', 'Entire bill')}${tog('items', 'By item')}</div><select data-f="cur" aria-label="Currency">${CURS.map(c => `<option ${c === d.cur ? 'selected' : ''}>${c}</option>`).join('')}</select></div>`;
     const head = `<div class="card"><input class="w" data-f="name" placeholder="Description" aria-label="Description" value="${esc(d.name)}">
+      <label class="fl m" for="f-date">Date</label><input class="w" id="f-date" type="date" data-f="date" aria-label="Expense date" value="${esc(d.date)}">
+      <label class="fl m" for="f-cat">Category (optional)</label><select class="w" id="f-cat" data-f="cat" aria-label="Category">${catOpts(d.cat)}</select>
       ${w ? `<input class="w" type="number" inputmode="decimal" step="0.01" min="0" data-f="amount" placeholder="Bill amount (${d.cur})" aria-label="Bill amount" value="${esc(d.amount)}">` : ''}
       <div class="row"><span class="n">Paid by</span><select data-f="payer"><option value="">Choose</option>${M.map(m => `<option ${m === d.payer ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></div>
       ${w ? `<div class="row"><span class="n">Split</span><button class="s" data-a="menu">${{ even: 'Evenly (' + d.even.length + ')', pct: 'By percentages', amt: 'Unequally' }[d.how]} ▸</button></div>` : ''}</div>`;
@@ -888,9 +893,7 @@ async function viewExpense(id, tripId) {
       <div class="bar"><button class="s" data-a="addrow">+ Add row</button><button class="s" data-a="cam">Scan receipt</button><button class="s" data-a="gal">From gallery</button></div><div class="row" style="border:0;padding:6px 0 0"><span class="m">Receipt language</span><select data-f="rlang" aria-label="Receipt language">${LANGS.map(l => `<option value="${l[0]}" ${(d.rlang || ls.get('rlang', 'en')) === l[0] ? 'selected' : ''}>${l[1]}</option>`).join('')}</select></div><p class="m" id="scm">${esc(scanning)}</p><p class="m" id="tot"></p></div>`;
     }
     const fxCard = `<div class="card"><h2>Actual amount charged (optional)</h2><p class="m">What your card or bank really charged, in another currency. It only feeds your conversion rate on the Members page and never changes the split.</p><div class="f"><input type="number" inputmode="decimal" step="0.01" min="0" data-f="fxAmt" placeholder="Amount" aria-label="Actual amount charged" value="${esc(d.fxAmt)}"><select data-f="fxCur" aria-label="Currency charged">${CURS.map(c => `<option ${c === d.fxCur ? 'selected' : ''}>${c}</option>`).join('')}</select></div></div>`;
-    const dateCard = `<div class="card"><h2>Date</h2><input class="w" type="date" data-f="date" aria-label="Expense date" value="${esc(d.date)}"></div>`;
-    const catCard = `<div class="card"><h2>Category <span class="m">(optional)</span></h2><select class="w" data-f="cat" aria-label="Category"><option value="">No category</option>${CATS.map(c => `<option value="${c[0]}" ${d.cat === c[0] ? 'selected' : ''}>${c[1]} ${c[2]}</option>`).join('')}</select></div>`;
-    app.innerHTML = `<div class="hd"><a href="${tripId ? '#/t/' + esc(tripId) : '#/'}">‹ ${tripId ? 'Group' : 'Groups'}</a><h1>${id ? 'Edit expense' : 'Add expense'}</h1></div>${top}${head}${main}${fxCard}${dateCard}${catCard}
+    app.innerHTML = `<div class="hd"><a href="${tripId ? '#/t/' + esc(tripId) : '#/'}">‹ ${tripId ? 'Group' : 'Groups'}</a><h1>${id ? 'Edit expense' : 'Add expense'}</h1></div>${top}${head}${main}${fxCard}
     <div class="bar"><button data-a="save">Save expense</button>${d.lock ? '<button class="s" data-a="lk">Change password</button><button class="s" data-a="rl">Remove lock</button>' : '<button class="s" data-a="lk">Lock expense</button>'}${id ? '<button class="s" data-a="del">Delete</button>' : ''}</div>`;
     hint();
   };
@@ -1000,7 +1003,16 @@ async function viewExpense(id, tripId) {
     else d[f] = t.value;
     hint();
   };
-  app.onchange = e => { const t = e.target; if (t.tagName === 'SELECT' && t.dataset.f) { d[t.dataset.f] = t.value; if (t.dataset.f === 'rlang') ls.set('rlang', t.value); draw(); } };
+  app.onchange = e => {
+    const t = e.target;
+    if (ro) {
+      if (t.tagName === 'SELECT' && t.dataset.f === 'cat') {
+        const m = document.getElementById('catmsg'); if (m) m.textContent = 'Saving...';
+        db.collection('bills').doc(id).update({ category: t.value || FV.delete() }).then(() => { bill.category = t.value; d.cat = t.value; const m2 = document.getElementById('catmsg'); if (m2) m2.textContent = 'Saved.'; }, () => { t.value = bill.category || ''; const m2 = document.getElementById('catmsg'); if (m2) m2.textContent = 'Could not save. Check your connection.'; });
+      }
+      return;
+    }
+    if (t.tagName === 'SELECT' && t.dataset.f) { d[t.dataset.f] = t.value; if (t.dataset.f === 'rlang') ls.set('rlang', t.value); draw(); } };
   app.onkeydown = e => {
     if (e.key === 'Escape' && (ui.menu || ui.who !== null)) { ui.menu = false; ui.who = null; draw(); return; }
     if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('item')) { e.preventDefault(); e.target.click(); }
