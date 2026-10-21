@@ -101,6 +101,14 @@ body{padding-bottom:150px}
 .rad{display:inline-block;width:20px;height:20px;border-radius:50%;box-shadow:inset 0 0 0 2px var(--line);margin-right:10px;vertical-align:-4px;flex:none}.rad.on{background:radial-gradient(var(--acc) 0 42%,transparent 46%);box-shadow:inset 0 0 0 2px var(--acc)}.row .n.tap{padding:4px 0}.row .x{font-size:1.15rem}
 .ph3{display:flex;justify-content:space-between;align-items:center;gap:10px}.ph3 h2{margin:0}
 .sw{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0 4px}.swb{width:34px;height:34px;padding:0;border-radius:50%;box-shadow:0 0 0 1.5px var(--line)}.swb.on{box-shadow:0 0 0 3px var(--bg),0 0 0 5px var(--ink)}.sw input[type=color]{width:44px;height:36px;padding:2px;border-radius:12px;cursor:pointer}
+.row.ex2{padding:0;gap:6px}.exm{display:flex;justify-content:space-between;align-items:center;gap:10px;flex:1;min-width:0;padding:9px 0;color:var(--ink);text-decoration:none;font-weight:400}.exm .n{flex:1;min-width:0}
+a.ebtn{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--accbg);color:var(--acc);text-decoration:none;font-size:1.1rem;font-weight:700}
+.hrow{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:4px}.hrow .m{margin:0}
+.eh{flex:none;background:rgba(255,255,255,.22);color:var(--onhd);box-shadow:none;border-radius:999px;padding:7px 14px;font-size:.9rem}
+.li{display:flex;justify-content:space-between;gap:10px;font-size:.9rem;color:var(--mute);padding:1px 0}
+.tag.ok{background:var(--teal);color:#331E1D;transform:none}
+.big2{font-size:1.8rem;font-weight:700;line-height:1.1;margin:2px 0 6px}.yours{background:var(--accbg)}
+.who{border-bottom:2px dashed var(--line)}.who:last-of-type{border-bottom:0}
 </style>
 </head>
 <body>
@@ -311,30 +319,61 @@ const loadTess = () => tessP || (tessP = new Promise((res, rej) => {
 async function prepPhoto(file) {
   let bmp;
   try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { bmp = await createImageBitmap(file); }
-  const sc = Math.min(1, 1800 / Math.max(bmp.width, bmp.height)), cv = document.createElement('canvas');
+  const sc = Math.min(4, 1800 / Math.max(bmp.width, bmp.height)), cv = document.createElement('canvas');
   cv.width = Math.round(bmp.width * sc); cv.height = Math.round(bmp.height * sc);
-  const x = cv.getContext('2d'); x.filter = 'grayscale(1) contrast(1.4)'; x.drawImage(bmp, 0, 0, cv.width, cv.height);
+  const x = cv.getContext('2d'); x.imageSmoothingQuality = 'high'; x.filter = 'grayscale(1) contrast(1.4)'; x.drawImage(bmp, 0, 0, cv.width, cv.height);
   return cv;
 }
 const SKIP = /total|tax|sst|gst|service|svc|change|cash|round|paid|payment|tender|discount|balance|visa|master|card|invoice|receipt|table|cashier|date|time|tel|phone|thank|amount|qty|item/i;
 const LANGS = [['en', 'English (no translation)', 'eng'], ['zh-CN', 'Chinese (Simplified)', 'chi_sim+eng'], ['zh-TW', 'Chinese (Traditional)', 'chi_tra+eng'], ['ja', 'Japanese', 'jpn+eng'], ['ko', 'Korean', 'kor+eng'], ['th', 'Thai', 'tha+eng'], ['ms', 'Malay', 'eng'], ['id', 'Indonesian', 'eng'], ['vi', 'Vietnamese', 'vie+eng'], ['es', 'Spanish', 'spa+eng'], ['fr', 'French', 'fra+eng'], ['de', 'German', 'deu+eng'], ['it', 'Italian', 'ita+eng'], ['pt', 'Portuguese', 'por+eng']];
-const SKIPX = /合計|合计|总计|總計|小計|小计|消費税|消费税|税|稅|お釣|釣り|找零|找錢|现金|現金|会計|領収|レシート|日付|電話|电话|合计|합계|소계|부가세|현금|거스름|카드|영수증|ยอดรวม|ภาษี|เงินทอน|เงินสด|ส่วนลด|impuesto|propina|cambio|efectivo|tarjeta|montant|espèces|rendu|summe|mwst|rückgeld|karte|imposta|contanti|totale|troco|dinheiro|cartão|jumlah|baki|tunai|cukai|kembali|tổng|thuế|tiền mặt/i;
-function parseReceipt(text, lang = 'en') {
-  const out = [], intOK = ['ja', 'ko', 'vi', 'id'].includes(lang);
-  text.split('\n').forEach(line => {
-    const t = line.replace(/\s+/g, ' ').trim();
-    let name, price;
-    const m = t.match(/^(.*?)\s*(?:RM|\$|[¥￥€£฿₩])?\s*(\d{1,5}[.,]\d{2})\s*[A-Za-z]{0,2}$/);
-    if (m) { name = m[1]; price = m[2].replace(',', '.'); }
-    else if (intOK) {
-      const k = t.match(/^(.*?)\s*[¥￥₩₫]?\s*(\d{1,3}(?:[,.]\d{3})+|\d{2,6})\s*(?:円|원|₫|đ|VND|JPY|KRW|IDR)?$/);
-      if (k) { name = k[1]; price = k[2].replace(/[,.]/g, ''); }
+const SKIPX = /合計|合计|总计|總計|小計|小计|消費税|消费税|税等|内税|税|稅|サービス|お釣|釣り|お預|伝票|テーブル|点数|対象|找零|找錢|现金|現金|現計|会計|領収|レシート|日付|電話|电话|합계|소계|부가세|현금|거스름|카드|영수증|ยอดรวม|ภาษี|เงินทอน|เงินสด|ส่วนลด|impuesto|propina|cambio|efectivo|tarjeta|montant|espèces|rendu|summe|mwst|rückgeld|karte|imposta|contanti|totale|troco|dinheiro|cartão|jumlah|baki|tunai|cukai|kembali|tổng|thuế|tiền mặt/i;
+const CJKR = '\\u3000-\\u30ff\\u3400-\\u9fff\\uac00-\\ud7af\\u0e00-\\u0e7f\\uff00-\\uffef';
+const MARK = /^\s*[外内軽※*＊]/;
+// last yen-style amount on a line: copes with "¥1, 360", a tax mark like 外 read as junk, or glued onto the digits
+function lastYen(t) {
+  const all = [...t.matchAll(/[¥Y]\s*(\d{1,3}(?:[,.]\s?\d+)?|\d+)/g)]; if (!all.length) return null;
+  const m = all[all.length - 1], raw = m[1], after = t.slice(m.index + m[0].length); let price;
+  const sp = raw.split(/[,.]\s?/);
+  if (sp.length > 1) { if (sp[1].length < 3) return null; price = sp[0] + sp[1].slice(0, 3); }
+  else {
+    price = raw;
+    if (price.length >= 4 && !price.endsWith('0') && /^\s*[^\d\s]/.test(after) && !MARK.test(after)) {
+      for (const k of [1, 2]) { const c = price.slice(0, price.length - k); if (c.length >= 3 && c.endsWith('0')) { price = c; break; } }
     }
-    if (!name) return;
-    name = name.replace(/[|_~=*]+/g, ' ').replace(/\s*(RM|\$|[¥￥€£฿₩])$/i, '').replace(/[\s.:-]+$/, '').trim();
-    const cjk = /[\u3000-\u9fff\uac00-\ud7af\u0e00-\u0e7f]/.test(name);
-    if ([...name].length < (cjk ? 1 : 2) || !/\p{L}/u.test(name) || SKIP.test(name) || (lang !== 'en' && SKIPX.test(name))) return;
-    out.push({ n: name, p: price });
+  }
+  return { name: t.slice(0, m.index), price };
+}
+function parseReceipt(text, lang = 'en') {
+  const out = [], intOK = ['ja', 'ko', 'vi', 'id'].includes(lang); let pending = '', run = 0, stop = false;
+  const cjkGap = new RegExp('(?<=[' + CJKR + '])\\s+(?=[' + CJKR + '])', 'g');
+  text.split('\n').forEach(line => {
+    if (stop) return;
+    let t = line.normalize('NFKC').replace(cjkGap, '').replace(/\s+/g, ' ').trim();
+    let name, price, hit = null;
+    if (lang === 'ja' || lang === 'zh-CN' || lang === 'zh-TW') hit = lastYen(t);
+    if (hit) { name = hit.name; price = hit.price; }
+    else {
+      const m = t.match(/^(.*?)\s*(?:RM|\$|[¥€£฿₩])?\s*(\d{1,5}[.,]\d{2})\s*[A-Za-z]{0,2}$/);
+      if (m) { name = m[1]; price = m[2].replace(',', '.'); }
+      else if (intOK) {
+        const k = t.match(/^(.*?)\s*[¥₩₫]?\s*(\d{1,3}(?:[,.]\s?\d{3})+|\d{2,7})\s*(?:円|원|外|内|軽|※|[*＊]|₫|đ|VND|JPY|KRW|IDR)*$/);
+        if (k) { name = k[1]; price = k[2].replace(/[,.\s]/g, ''); }
+      }
+    }
+    const clean = x => x.replace(/[|_~=*]+/g, ' ').replace(/^[\s*★•・.:-]+/, '').replace(/\s*(RM|\$|[¥€£฿₩])$/i, '').replace(/[\s.:\-—–]+$/, '').trim();
+    const okName = n => { const cjk = /[\u3000-\u9fff\uac00-\ud7af\u0e00-\u0e7f]/.test(n);
+      return [...n].length >= (cjk ? 1 : 2) && /\p{L}/u.test(n) && !SKIP.test(n) && !(lang !== 'en' && SKIPX.test(n)) && !/\d{4}\s*年|\d+\s*月\s*\d+\s*日|\d{1,2}:\d{2}|^no\.?\s*\d/i.test(n); };
+    if (name === undefined) { const c = clean(t.replace(/[¥Y]\s*\d.*$/, '')); pending = okName(c) ? c : ''; return; }
+    const raw = name.trim();
+    if (/[\d]-\s*$/.test(raw) || /-\s*$/.test(raw) && /\d/.test(raw)) { pending = ''; return; }   // phone numbers and addresses
+    let nm = clean(raw);
+    if (/^\W{0,2}\s*[¥]?\s*\d[\d,.]*\s*[xX×*]\s*\d+$/.test(raw.replace(/\s+/g, ' ')) || !nm) nm = pending;   // "@680 x 2 ¥1,360" belongs to the line above
+    pending = '';
+    if (!nm || !okName(nm)) return;
+    // a line whose amount equals everything listed so far is the subtotal: the items are over
+    if (out.length >= 2 && Math.round(parseFloat(price) * 100) === Math.round(run * 100)) { stop = true; return; }
+    run += parseFloat(price) || 0;
+    out.push({ n: nm, p: price });
   });
   return out;
 }
@@ -363,6 +402,7 @@ function route() {
   app.onclick = app.onchange = app.oninput = app.onkeydown = null;
   const [, t, id] = location.hash.split('/');
   if (t === 't' && id) viewTrip(id);
+  else if (t === 'v' && id) viewDetail(id);
   else if (t === 'b' && id) viewExpense(id, null);
   else if (t === 'n' && id) viewExpense(null, id === '-' ? null : id);
   else viewHome();
@@ -377,7 +417,7 @@ const on = (map) => {
 // ---------- home ----------
 function viewHome() {
   const h = ls.get('hist', []), gs = h.filter(x => x.t === 't'), bs = h.filter(x => x.t === 'b');
-  const row = x => `<div class="row"><a class="n ex" href="#/${x.t}/${esc(x.id)}"><span class="av">${esc((x.name || '?')[0].toUpperCase())}</span>${esc(x.name)}</a><button class="x" data-a="rm" data-id="${esc(x.id)}" aria-label="Remove from list">Remove</button></div>`;
+  const row = x => `<div class="row"><a class="n ex" href="#/${x.t === 'b' ? 'v' : x.t}/${esc(x.id)}"><span class="av">${esc((x.name || '?')[0].toUpperCase())}</span>${esc(x.name)}</a><button class="x" data-a="rm" data-id="${esc(x.id)}" aria-label="Remove from list">Remove</button></div>`;
   app.innerHTML = `<div class="hd"><h1>Groups</h1><p class="m">Share costs with friends. Everyone with the link can join in, no sign-in.</p></div>
   <div class="card">${gs.map(row).join('') || '<p class="m">No groups yet. Start one for a trip, a household, or any shared costs.</p>'}<div class="bar"><button class="s" data-a="nt">Start a new group</button></div></div>
   <div class="card"><h2>Non-group expenses</h2>${bs.map(row).join('') || '<p class="m">One-off expenses outside a group show up here.</p>'}<div class="bar"><button class="s" data-a="nb">Add a non-group expense</button></div></div>
@@ -441,7 +481,7 @@ function viewTrip(id) {
           else if (c.per[me]) st = `<span class="neg">you borrowed<b>${fmt(c.per[me], cu)}</b></span>`;
           else st = '<span class="m">not involved</span>';
         }
-        return `<a class="row ex" href="#/b/${esc(b._id)}"><span class="dt">${mon[mm - 1]}<br><b>${dd}</b>${yy !== new Date().getFullYear() ? '<br>' + yy : ''}</span><span class="n"><b>${esc(b.name)}</b>${b.lock ? ' <span class="tag">Locked</span>' : ''}<br><span class="m">${b.payer ? esc(b.payer === me ? 'You' : b.payer) + ' paid ' + fmt(c.total, cu) : fmt(c.total, cu)}</span></span><span class="st">${st}</span></a>`;
+        return `<div class="row ex2"><a class="exm" href="#/v/${esc(b._id)}"><span class="dt">${mon[mm - 1]}<br><b>${dd}</b>${yy !== new Date().getFullYear() ? '<br>' + yy : ''}</span><span class="n"><b>${esc(b.name)}</b>${b.lock ? ' <span class="tag">Locked</span>' : ''}<br><span class="m">${b.payer ? esc(b.payer === me ? 'You' : b.payer) + ' paid ' + fmt(c.total, cu) : fmt(c.total, cu)}</span></span><span class="st">${st}</span></a><a class="ebtn" href="#/b/${esc(b._id)}" aria-label="Edit ${esc(b.name)}" title="Edit">✎</a></div>`;
       }).join('') || '<p class="m">No expenses yet. Tap Add expense to record the first one.</p>';
       body = `<div class="card">${body}</div>`;
     } else if (tab === 'b') {
@@ -627,6 +667,72 @@ const errBox = m => modal({ title: 'Error', msg: m, noCancel: true });
 const HEAD = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z"/></svg>';
 const r2 = x => Math.round(x * 100) / 100;
 const sumOf = (o, M) => M.reduce((a, m) => a + (+o[m] || 0), 0);
+function viewDetail(id) {
+  let b = null, trip = null, tripId = null, tsub = false;
+  const meName = () => tripId ? ls.get('me_' + tripId, '') : '';
+  const r2 = v => Math.round(v * 100) / 100;
+  const info = () => {
+    const c = calc(b), cu = b.currency || 'MYR', pay = b.payer || '', sets = (trip && trip.settlements) || [];
+    const f = b.fee != null ? 1 + b.fee / 100 : (1 + (b.svc || 0) / 100) * (1 + (b.tax || 0) / 100);
+    const lines = {};
+    if (b.mode === 'whole') Object.keys(c.per).forEach(n => { lines[n] = [{ t: (c.names[n] || [''])[0], a: c.per[n] }]; });
+    else if (b.splitMode === 'equal' || b.splitMode === 'custom') Object.keys(c.per).forEach(n => { lines[n] = [{ t: (c.names[n] || [''])[0], a: c.per[n] }]; });
+    else Object.values(b.items || {}).sort((x, y) => (x.o || 0) - (y.o || 0)).forEach(i => { const cl = i.claims || []; cl.forEach(n => { (lines[n] = lines[n] || []).push({ t: i.name, a: i.price * (splitOK(i) ? i.split[n] / 100 : 1 / cl.length) * f }); }); });
+    const paid = n => sets.filter(x => x.bill === id && x.from === n && x.to === pay && (x.cur || 'MYR') === cu).reduce((a, x) => a + (+x.amt || 0), 0);
+    return { c, cu, pay, sets, lines, paid, left: n => Math.max(0, r2((c.per[n] || 0) - paid(n))) };
+  };
+  const draw = () => {
+    if (!b) return;
+    const { c, cu, pay, lines, paid, left } = info(), me = meName(), canSettle = !!(tripId && pay);
+    const date = b.date || iso(b.created || Date.now());
+    const nice = (() => { try { return new Date(date + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); } catch (e) { return date; } })();
+    const L = n => (lines[n] || []).map(x => `<div class="li"><span>${esc(x.t)}</span><span>${fmt(x.a, cu)}</span></div>`).join('');
+    const status = n => {
+      if (n === pay) return '<span class="tag ok">Paid the bill</span>';
+      if (!canSettle) return `<span class="m">owes ${esc(pay || '?')}</span>`;
+      const rem = left(n);
+      if (rem > 0.005) return `<button data-a="sp" data-n="${esc(n)}">Settle up ${fmt(rem, cu)}</button>`;
+      return `<span class="tag ok">Settled</span>${paid(n) > 0 ? ` <button class="s" data-a="su" data-n="${esc(n)}">Undo</button>` : ''}`;
+    };
+    const people = Object.keys(c.per).filter(n => c.per[n] > 0.005).sort((x, y) => (y === pay) - (x === pay) || c.per[y] - c.per[x]);
+    let mine = '';
+    if (tripId && !me) mine = '<div class="card"><p class="m">Pick your name on the Members tab to see your own share here.</p></div>';
+    else if (me && c.per[me] > 0.005) {
+      mine = `<div class="card yours"><h2>Your share</h2><div class="big2">${fmt(c.per[me], cu)}</div>${me === pay ? `<p class="m">You paid this expense, so everyone else owes you.</p>` : `<p class="m">You owe <b>${esc(pay || 'the payer')}</b> for:</p>`}${L(me)}${me !== pay && canSettle ? `<div class="bar">${status(me)}</div>` : ''}</div>`;
+    } else if (me) mine = '<div class="card"><p class="m">You are not part of this expense.</p></div>';
+    const its = b.mode === 'whole' ? '' : Object.values(b.items || {}).sort((x, y) => (x.o || 0) - (y.o || 0));
+    const itemsCard = its && its.length ? `<div class="card"><h2>Items</h2>${its.map(i => `<div class="row"><span class="n">${esc(i.name)}<br><span class="m">${(i.claims || []).length ? esc((i.claims || []).join(', ')) : 'Not assigned yet'}</span></span><span class="amt">${fmt(i.price, cu)}</span></div>`).join('')}<p class="m">${b.fee != null ? 'Service charge and taxes: ' + b.fee + '%' : ''}</p></div>` : '';
+    const all = `<div class="card"><h2>Who owes what</h2>${people.map(n => `<div class="who"><div class="row" style="border:0;padding:6px 0 2px"><span class="n"><b>${esc(n)}</b>${n === me ? ' <span class="tag">You</span>' : ''}</span><span class="amt"><b>${fmt(c.per[n], cu)}</b></span></div>${L(n)}<div class="bar" style="margin:6px 0 10px">${status(n)}</div></div>`).join('') || '<p class="m">Nobody has been assigned a share yet.</p>'}${c.unclaimed > 0.005 ? `<p class="m"><b>${fmt(c.unclaimed, cu)}</b> of items are not assigned to anyone yet.</p>` : ''}</div>`;
+    app.innerHTML = `<div class="hd hd2l"><h1><a href="#/${tripId ? 't/' + esc(tripId) : ''}" aria-label="Back">‹</a> ${esc(b.name)}${b.lock ? ' <span class="tag">Locked</span>' : ''}</h1><div class="hrow"><p class="m">${esc(nice)}${pay ? ' · ' + esc(pay === me ? 'You' : pay) + ' paid <b class="sp">' + fmt(c.total, cu) + '</b>' : ' · <b class="sp">' + fmt(c.total, cu) + '</b>'}</p><button class="eh" data-a="ed" aria-label="Edit this expense">✎ Edit</button></div></div>`
+      + mine + all + itemsCard
+      + (b.fx && b.fx.amt ? `<div class="card"><p class="m">Actually charged <b>${fmt(b.fx.amt, b.fx.cur)}</b> for this expense.</p></div>` : '')
+      + (tripId ? '' : '<div class="card"><p class="m">This is a standalone expense, so payments are not tracked here. Put it in a group to settle up.</p></div>');
+  };
+  app.onclick = e => {
+    const el = e.target.closest('[data-a]'); if (!el || !b) return;
+    const a = el.dataset.a, n = el.dataset.n;
+    if (a === 'ed') return go('/b/' + id);
+    const { cu, pay, left, sets } = info(), ref = tripId && db.collection('trips').doc(tripId);
+    if (a === 'sp') {
+      const amt = left(n); if (!(amt > 0.005) || !ref || !pay) return;
+      ref.update({ settlements: FV.arrayUnion({ from: n, to: pay, amt, cur: cu, bill: id, t: Date.now() }) }).catch(() => errBox('Could not record the payment. Check your connection and try again.'));
+    } else if (a === 'su') {
+      modal({ title: 'Undo this payment?', msg: n + ' paid ' + pay + ' for this expense. This puts the amount back on the balances.', ok: 'Undo' }).then(ok => {
+        if (!ok || !ref) return;
+        ref.update({ settlements: (trip.settlements || []).filter(x => !(x.bill === id && x.from === n && x.to === pay)) }).catch(() => errBox('Could not undo the payment. Check your connection and try again.'));
+      });
+    }
+  };
+  sub(db.collection('bills').doc(id), d => {
+    if (!d.exists) { app.innerHTML = '<div class="card"><b>Expense not found.</b> <a href="#/">Back</a></div>'; return; }
+    b = d.data(); b._id = d.id; tripId = b.tripId || null;
+    if (tripId && !tsub) {
+      tsub = true;
+      sub(db.collection('trips').doc(tripId), t => { trip = t.exists ? t.data() : null; if (trip) addHist('t', tripId, trip.name); draw(); });
+    } else if (!tripId) addHist('b', id, b.name);
+    draw();
+  });
+}
 async function viewExpense(id, tripId) {
   let trip = null, d = null, created = Date.now(), ui = { menu: false, who: null }, scanning = '', bill = null, ro = false, tries = 0, pause = 0;
   const members = () => tripId ? (trip ? trip.members : []) : (d.members || []);
@@ -736,7 +842,9 @@ async function viewExpense(id, tripId) {
     try {
       const [T, cv] = await Promise.all([loadTess(), prepPhoto(f)]);
       const rl = d.rlang || ls.get('rlang', 'en'), lg = LANGS.find(x => x[0] === rl) || LANGS[0];
-      const r = await T.recognize(cv, lg[2], { logger: m => { if (m.status === 'recognizing text' && scanHook === scanFile) { const e = document.getElementById('scm'); if (e) e.textContent = 'Reading receipt ' + Math.round(m.progress * 100) + '%'; } } });
+      const wk = await T.createWorker(lg[2], 1, { logger: m => { if (m.status === 'recognizing text' && scanHook === scanFile) { const e = document.getElementById('scm'); if (e) e.textContent = 'Reading receipt ' + Math.round(m.progress * 100) + '%'; } } });
+      let r;
+      try { await wk.setParameters({ tessedit_pageseg_mode: '6', preserve_interword_spaces: '1' }); r = await wk.recognize(cv); } finally { try { await wk.terminate(); } catch (e) {} }
       if (scanHook !== scanFile) return;
       let rows = parseReceipt(r.data.text, lg[0]), tmsg = '';
       if (lg[0] !== 'en' && rows.length) {
@@ -747,7 +855,7 @@ async function viewExpense(id, tripId) {
       if (scanHook !== scanFile) return;
       d.items = d.items.filter(x => x.n || x.p).concat(rows.map(x => ({ n: x.n, p: x.p, c: [] })));
       if (!d.items.length) d.items = [{ n: '', p: '', c: [] }];
-      scanning = rows.length ? rows.length + ' items added. Check names and prices below.' + tmsg : 'No items found. Try a flatter, brighter photo, or add items by hand.';
+      scanning = rows.length ? rows.length + ' items added. Check names and prices below.' + tmsg : (lg[0] === 'en' ? 'No items found. If the receipt is not in English, choose its language above and scan again. Otherwise try a flatter, brighter photo.' : 'No items found. Try a flatter, brighter photo, or add items by hand.');
     } catch (e) { if (scanHook !== scanFile) return; scanning = 'Scan failed: ' + e.message; }
     draw();
   };
