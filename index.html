@@ -427,8 +427,12 @@ function viewTrip(id) {
       ov.addEventListener('click', e => {
         if (e.target === ov || e.target.closest('[data-close]')) return close();
         const b = e.target.closest('button[data-i]'); if (!b) return;
-        const x = list[+b.dataset.i]; close();
-        ref.update({ settlements: FV.arrayUnion({ from: x.from, to: x.to, amt: x.amt, cur: c, t: Date.now() }) });
+        const x = list[+b.dataset.i]; if (!x || x.done) return;
+        x.done = true; b.disabled = true;
+        const row = b.closest('.row'); if (row) row.remove();
+        if (!list.some(y => !y.done)) close();
+        ref.update({ settlements: FV.arrayUnion({ from: x.from, to: x.to, amt: x.amt, cur: c, t: Date.now() }) })
+          .catch(() => errBox('Could not record the payment. Check your connection and try again.'));
       });
       document.addEventListener('keydown', kd, true);
       document.body.appendChild(ov);
