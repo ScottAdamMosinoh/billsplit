@@ -137,6 +137,7 @@ input,select,textarea{font-size:max(16px,1rem)}
 .szr{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 4px}.szr b{min-width:3.2em;text-align:center}.szr button:disabled{opacity:.4;cursor:default}
 .szr{display:flex;align-items:center;gap:12px;margin:6px 0 0}.szr input[type=range]{flex:1;min-width:0;accent-color:var(--acc);height:28px}.szs{display:flex;justify-content:space-between;font-size:.75rem;color:var(--mute);margin-bottom:4px}
 .stg{font-size:16px!important}.stg *{font-size:inherit!important}.stg h2{font-size:20px!important}.stg .m,.stg .szs{font-size:14px!important}.stg button,.stg select{font-size:15px!important}.stg [data-fprev]{font-size:1rem!important}
+.arow.tap{cursor:pointer;border-radius:14px;padding:4px 6px;margin:8px -6px}.arow.tap:active{background:var(--accbg)}a.exr{color:var(--ink);text-decoration:none;font-weight:400}.mb .row .amt{white-space:nowrap}
 </style>
 </head>
 <body>
@@ -538,12 +539,18 @@ function viewTrip(id) {
       }).join('') || '<p class="m">No expenses yet. Tap Add expense to record the first one.</p>';
       body = `<div class="card">${body}</div>`;
     } else if (tab === 'a') {
-      const by = {};
-      bills.forEach(b => { let t = 0; try { t = calc(b).total; } catch (e) {} if (!(t > 0)) return; const cu = b.currency || 'MYR', k = b.category || ''; by[cu] = by[cu] || {}; by[cu][k] = (by[cu][k] || 0) + t; });
+      const by = {}, byP = {};
+      bills.forEach(b => { let c = null; try { c = calc(b); } catch (e) {} const t = c ? c.total : 0; if (!(t > 0)) return; const cu = b.currency || 'MYR', k = b.category || ''; by[cu] = by[cu] || {}; by[cu][k] = (by[cu][k] || 0) + t; byP[cu] = byP[cu] || {}; Object.entries(c.per).forEach(([n, v]) => { if (v > 0.005) byP[cu][n] = (byP[cu][n] || 0) + v; }); });
+      const meN = ls.get('me_' + id, '');
       body = Object.keys(by).map(cu => {
         const rows = Object.entries(by[cu]).sort((x, y) => y[1] - x[1]), tot = rows.reduce((a, r) => a + r[1], 0), max = rows[0][1];
         const top = rows[0], unc = by[cu][''] || 0;
-        return `<div class="card"><h2>Spending by category (${cu})</h2><p class="m">Total <b>${fmt(tot, cu)}</b> across ${bills.filter(b => (b.currency || 'MYR') === cu).length} expenses${rows.length > 1 || top[0] ? '. Biggest: ' + esc(catName(top[0])) + ' (' + Math.round(100 * top[1] / tot) + '%)' : ''}.</p>${rows.map(([k, v]) => { const i = CATS.findIndex(c => c[0] === k); return `<div class="arow" role="img" aria-label="${esc(catName(k))}: ${fmt(v, cu)}, ${Math.round(100 * v / tot)} percent"><div class="ahead"><span>${esc(catName(k))}</span><span><b>${fmt(v, cu)}</b> <span class="m">${Math.round(100 * v / tot)}%</span></span></div><div class="abar"><i style="width:${Math.max(2, Math.round(100 * v / max))}%;background:${i < 0 ? 'var(--mute)' : CAT_COL[i % CAT_COL.length]}"></i></div></div>`; }).join('')}${unc / tot > 0.2 ? '<p class="m">Tip: choose a category when adding or editing an expense to see a clearer picture.</p>' : ''}</div>`;
+        return `<div class="card"><h2>Spending by category (${cu})</h2><p class="m">Total <b>${fmt(tot, cu)}</b> across ${bills.filter(b => (b.currency || 'MYR') === cu).length} expenses${rows.length > 1 || top[0] ? '. Biggest: ' + esc(catName(top[0])) + ' (' + Math.round(100 * top[1] / tot) + '%)' : ''}.</p>${rows.map(([k, v]) => { const i = CATS.findIndex(c => c[0] === k); return `<div class="arow" role="img" aria-label="${esc(catName(k))}: ${fmt(v, cu)}, ${Math.round(100 * v / tot)} percent"><div class="ahead"><span>${esc(catName(k))}</span><span><b>${fmt(v, cu)}</b> <span class="m">${Math.round(100 * v / tot)}%</span></span></div><div class="abar"><i style="width:${Math.max(2, Math.round(100 * v / max))}%;background:${i < 0 ? 'var(--mute)' : CAT_COL[i % CAT_COL.length]}"></i></div></div>`; }).join('')}${unc / tot > 0.2 ? '<p class="m">Tip: choose a category when adding or editing an expense to see a clearer picture.</p>' : ''}</div>`
+          + (() => {
+            const pr = Object.entries(byP[cu] || {}).sort((x, y) => y[1] - x[1]); if (!pr.length) return '';
+            const pt = pr.reduce((a, r) => a + r[1], 0), pm = pr[0][1];
+            return `<div class="card"><h2>Spending by person (${cu})</h2><p class="m">Each person's share of the expenses, highest first. Tap a name for details.</p>${pr.map(([n, v], i) => `<div class="arow tap" role="button" tabindex="0" data-a="pp" data-n="${esc(n)}" data-c="${cu}" aria-label="${esc(n)} spent ${fmt(v, cu)}. Show details"><div class="ahead"><span><b>${esc(n)}</b>${n === meN ? ' <span class="tag">You</span>' : ''}</span><span><b>${fmt(v, cu)}</b> <span class="m">${Math.round(100 * v / pt)}%</span> <span class="chev" aria-hidden="true">›</span></span></div><div class="abar"><i style="width:${Math.max(2, Math.round(100 * v / pm))}%;background:${CAT_COL[i % CAT_COL.length]}"></i></div></div>`).join('')}</div>`;
+          })();
       }).join('') || '<div class="card"><p class="m">No expenses yet. Add some, and choose a category for each, to see where the money goes.</p></div>';
     } else if (tab === 'b') {
       body = bals.map(([c, bal]) => {
@@ -664,6 +671,28 @@ function viewTrip(id) {
     },
     am: () => { const n = (prompt('Name') || '').trim(); if (n) ref.update({ members: FV.arrayUnion(n) }); },
     st: el => { ref.update({ settlements: FV.arrayUnion({ from: el.dataset.f, to: el.dataset.t, amt: +el.dataset.v, cur: el.dataset.c, t: Date.now() }) }); },
+    pp: el => {
+      const n = el.dataset.n, c = el.dataset.c, mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const rows = []; let paid = 0; const cats = {};
+      bills.forEach(b => {
+        if ((b.currency || 'MYR') !== c) return; let k = null; try { k = calc(b); } catch (e) { return; }
+        if (b.payer === n) paid += k.total;
+        const v = k.per[n]; if (!(v > 0.005)) return;
+        rows.push({ id: b._id, name: b.name, date: b.date || iso(b.created || Date.now()), cat: b.category || '', v });
+        cats[b.category || ''] = (cats[b.category || ''] || 0) + v;
+      });
+      const tot = rows.reduce((a, r) => a + r.v, 0);
+      rows.sort((x, y) => y.date.localeCompare(x.date));
+      const cl = Object.entries(cats).sort((x, y) => y[1] - x[1]);
+      const dt = d => { const p = d.split('-'); return p.length === 3 ? mon[+p[1] - 1] + ' ' + (+p[2]) : d; };
+      const ov = document.createElement('div'); ov.className = 'ov';
+      ov.innerHTML = `<div class="mb" role="dialog" aria-modal="true" aria-label="${esc(n)} spending" style="max-height:86vh;overflow:auto"><h2>${esc(n)}</h2><div class="big2">${fmt(tot, c)}</div><p class="m">Total share across ${rows.length} expense${rows.length === 1 ? '' : 's'} (${c})${paid > 0.005 ? '. Paid ' + fmt(paid, c) + ' for the group' : ''}.</p>${cl.length > 1 || (cl[0] && cl[0][0]) ? '<h3 style="margin:12px 0 4px;font-size:1rem">By category</h3>' + cl.map(([k, v]) => `<div class="row" style="padding:5px 0"><span class="n">${esc(catName(k))}</span><span class="amt">${fmt(v, c)}</span></div>`).join('') : ''}<h3 style="margin:12px 0 4px;font-size:1rem">Expenses</h3>${rows.map(r => `<a class="row exr" href="#/v/${esc(r.id)}" style="padding:7px 0"><span class="n"><b>${esc(r.name)}</b><br><span class="m">${esc(dt(r.date))}${r.cat ? ' · ' + esc(catName(r.cat)) : ''}</span></span><span class="amt">${fmt(r.v, c)}</span></a>`).join('')}<div class="bar" style="justify-content:flex-end"><button data-close>Close</button></div></div>`;
+      const close = () => { document.removeEventListener('keydown', kd, true); ov.remove(); };
+      const kd = e => { if (e.key === 'Escape') close(); };
+      ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-close]') || e.target.closest('a.exr')) close(); });
+      document.addEventListener('keydown', kd, true);
+      document.body.appendChild(ov);
+    },
     bp: el => {
       const n = el.dataset.n, c = el.dataset.c;
       const bal = balances(bills, trip.settlements || [], c);
