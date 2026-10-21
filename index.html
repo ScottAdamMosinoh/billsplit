@@ -63,7 +63,7 @@ a.ex,.row.ex{color:var(--ink);text-decoration:none;font-weight:400}a.n.ex{displa
 
 .card{border-radius:26px;box-shadow:0 0 0 2px var(--line),4px 5px 0 var(--line);animation:pop .3s ease both}
 .hd{background:linear-gradient(135deg,var(--hd),var(--hd2));border-radius:0 0 34px 34px}
-.hd h1{font-weight:700}.hd .big{color:inherit;font-size:2rem;line-height:1.1;margin-top:6px}
+.hd h1{font-weight:600;font-size:22px;line-height:1.2}.hd .big{color:inherit;font-size:20px;font-weight:600;line-height:1.2;margin-top:6px}
 .hemo{font-size:2.6rem;line-height:1}
 .tag{background:var(--sun);color:#331E1D;transform:rotate(-3deg)}
 .av{border-radius:50%}.row:nth-child(3n+1) .av{background:var(--coral);color:#331E1D}.row:nth-child(3n+2) .av{background:var(--sun);color:#331E1D}.row:nth-child(3n) .av{background:var(--teal);color:#331E1D}
@@ -84,6 +84,7 @@ button{transition:transform .15s cubic-bezier(.34,1.56,.64,1)}button:active{tran
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 body{padding-bottom:150px}
 .tap{cursor:pointer}.tap:active{background:var(--accbg);border-radius:14px}.chev{font-size:1.6rem;line-height:1;color:var(--teal);font-weight:700;margin-left:2px}
+.hd2l{padding-top:calc(env(safe-area-inset-top,0px) + 14px);padding-bottom:16px}.hd2l h1{margin:0}.hd2l h1 a{font-size:1.5rem;margin-right:4px}.hd2l .m{margin:4px 0 0}.hd2l .sp{font-size:20px;font-weight:600}
 </style>
 </head>
 <body>
@@ -391,7 +392,7 @@ function viewTrip(id) {
       ${fxUI}<div class="card"><h2>Group total</h2><div class="big">${spent}</div><p class="m">across ${bills.length} expense${bills.length === 1 ? '' : 's'}</p><div class="bar"><button class="s" data-a="cl">Copy group link</button></div></div>`;
     }
     const seg = (v, t, i) => `<button class="${tab === v ? 'on' : ''}" data-a="tab" data-v="${v}"><span class="ni">${i}</span>${t}</button>`;
-    app.innerHTML = `<div class="hd"><a href="#/">‹ Groups</a><div class="hemo">${emo}</div><h1>${esc(trip.name)}</h1>${spentTxt ? `<div class="big">${spentTxt}</div><p class="m">total spent</p>` : ''}<p class="m">${line}</p></div>${tab === 'x' ? meCard : ''}
+    app.innerHTML = `<div class="hd hd2l"><h1><a href="#/" aria-label="Back to groups">‹</a> ${esc(trip.name)}</h1><p class="m">${spentTxt ? `<b class="sp">${spentTxt}</b> spent · ` : ''}${line}</p></div>${tab === 'x' ? meCard : ''}
     ${body}<div class="nav">${seg('x', 'Expenses', '🧾')}${seg('b', 'Balances', '⚖️')}${seg('m', 'Members', '👥')}</div>
     <button class="fab" data-a="nb">+ Add expense</button>`;
   };
