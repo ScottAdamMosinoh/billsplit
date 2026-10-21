@@ -8,16 +8,22 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>try{if(localStorage.getItem('theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}
-window.__accent=function(){try{var r=document.documentElement,hex=localStorage.getItem('accent')||'',keys=['--bg','--paper','--ink','--mute','--line','--acc','--accbg','--onacc','--hd','--hd2'];
-if(!/^#[0-9a-fA-F]{6}$/.test(hex)){keys.forEach(function(k){r.style.removeProperty(k)});return}
-var n=parseInt(hex.slice(1),16),R=(n>>16&255)/255,G=(n>>8&255)/255,B=(n&255)/255,mx=Math.max(R,G,B),mn=Math.min(R,G,B),l=(mx+mn)/2,d=mx-mn,s=d?d/(1-Math.abs(2*l-1)):0,h=0;
+window.__accent=function(){try{var r=document.documentElement,dk=r.getAttribute('data-theme')==='dark',
+keys=['--bg','--paper','--ink','--mute','--line','--acc','--accbg','--onacc','--hd','--hd2','--teal'];
+keys.forEach(function(k){r.style.removeProperty(k)});
+var P=function(hex){if(!/^#[0-9a-fA-F]{6}$/.test(hex||''))return null;var n=parseInt(hex.slice(1),16),R=(n>>16&255)/255,G=(n>>8&255)/255,B=(n&255)/255,mx=Math.max(R,G,B),mn=Math.min(R,G,B),l=(mx+mn)/2,d=mx-mn,s=d?d/(1-Math.abs(2*l-1)):0,h=0;
 if(d){h=mx===R?((G-B)/d)%6:mx===G?(B-R)/d+2:(R-G)/d+4;h=Math.round(h*60);if(h<0)h+=360}
-var g=d<.04;s=g?0:Math.round(Math.max(.3,s)*100);var S=function(x){return g?0:x};
-var dk=r.getAttribute('data-theme')==='dark',H=function(a,b,c){return 'hsl('+((a%360+360)%360)+','+b+'%,'+c+'%)'},v;
+return {h:h,s:s,l:l,g:d<.04}};
+var H=function(a,b,c){return 'hsl('+((a%360+360)%360)+','+b+'%,'+c+'%)'},v={},m=document.querySelector('meta[name="theme-color"]');
+var a=P(localStorage.getItem('accent')),b=P(localStorage.getItem('accent2'));
+if(a){var g=a.g,s=g?0:Math.round(Math.max(.3,a.s)*100),S=function(x){return g?0:x},h=a.h,l=a.l;
 if(dk){v={'--bg':H(h,S(30),9),'--paper':H(h,S(28),15),'--ink':H(h,S(45),86),'--mute':H(h,S(22),68),'--line':H(h,S(22),26),'--acc':H(h,Math.min(s,75),72),'--accbg':H(h,S(30),22),'--onacc':H(h,S(35),12),'--hd':H(h,S(45),28),'--hd2':H(h+14,S(50),33)}}
 else{var L=Math.min(Math.round(l*100),42);v={'--bg':H(h,S(55),85),'--paper':H(h,S(70),95),'--ink':H(h,S(30),15),'--mute':H(h,S(25),32),'--line':H(h,S(45),68),'--acc':H(h,s,L),'--accbg':H(h,S(60),80),'--onacc':'#FFF8F2','--hd':H(h,s,L),'--hd2':H(h+14,s,Math.min(L+9,52))}}
-for(var k in v)r.style.setProperty(k,v[k]);
-var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',v['--hd'])}catch(e){}};
+if(m)m.setAttribute('content',v['--hd'])}
+if(b){var s2=b.g?0:Math.round(Math.max(.35,b.s)*100);
+if(dk){v['--hd2']=H(b.h,Math.min(s2,70),36);v['--teal']=H(b.h,Math.min(s2,70),66)}
+else{var L2=Math.min(Math.max(Math.round(b.l*100),38),52);v['--hd2']=H(b.h,s2,Math.min(L2+4,54));v['--teal']=H(b.h,s2,L2)}}
+for(var k in v)r.style.setProperty(k,v[k])}catch(e){}};
 window.__accent();
 window.__fonts=[['Fredoka','Fredoka:wght@400;500;600;700'],['Figtree','Figtree:wght@400;500;600;700'],['Nunito','Nunito:wght@400;500;600;700'],['Poppins','Poppins:wght@400;500;600;700'],['DM Sans','DM+Sans:wght@400;500;600;700'],['Lora','Lora:wght@400;500;600;700'],['Atkinson Hyperlegible','Atkinson+Hyperlegible:wght@400;700'],['System','']];
 window.__font=function(){try{var n=localStorage.getItem('font')||'',f=null,r=document.documentElement;
@@ -155,7 +161,7 @@ input,select,textarea{font-size:max(16px,1rem)}
       return '<h2 style="margin-top:16px">Group settings</h2><p class="m">Default currency for new expenses in this group</p><select class="w" data-gcur aria-label="Default currency">' + g.curs.map(function (c) { return '<option' + (c === g.cur ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select><p class="m" style="margin-top:10px">Header picture</p><div class="bar" style="margin-top:4px"><button data-cpick>Choose photo</button><button class="s" data-crem' + (g.cover ? '' : ' hidden') + '>Remove</button></div><input type="file" accept="image/*" data-cfile hidden><p class="m" data-gmsg style="min-height:1.2em;margin:6px 0 6px"></p>';
     }
     var ov = document.createElement('div'); ov.className = 'ov';
-    ov.innerHTML = '<div class="mb stg" role="dialog" aria-modal="true" aria-label="Settings" style="max-height:88vh;overflow:auto"><h2>Settings</h2><p class="m">Appearance</p><div class="seg"><button data-t="light">Light</button><button data-t="dark">Dark</button></div><p class="m" style="margin-top:12px">Theme colour</p><div class="sw"><button class="swb" data-c="" aria-label="Default colours" title="Default" style="background:linear-gradient(135deg,#F3D1B5 50%,#9E3434 50%)"></button>' + [['#2B6CB0','Ocean'],['#2F7D4F','Forest'],['#7B4BB7','Grape'],['#D6457A','Rose'],['#D9822B','Sunset']].map(function (c) { return '<button class="swb" data-c="' + c[0] + '" aria-label="' + c[1] + '" title="' + c[1] + '" style="background:' + c[0] + '"></button>'; }).join('') + '<input type="color" data-accent aria-label="Pick any colour" value="#9e3434"></div><p class="m" style="margin-top:12px">Font</p><select class="w" data-font aria-label="Font">' + window.__fonts.map(function (f) { return '<option value="' + f[0] + '">' + (f[0] === 'Fredoka' ? 'Fredoka (default)' : f[0] === 'System' ? 'System (your phone\'s font)' : f[0]) + '</option>'; }).join('') + '</select><p class="m" data-fprev style="margin:6px 0 0">The quick brown fox jumps over 12 lazy dogs: RM 38.50</p><p class="m" style="margin-top:12px">Text size: <b data-szv>100%</b></p><div class="szr"><input type="range" min="15" max="140" step="5" value="100" data-szr aria-label="Text size percentage"><button class="s" data-szreset>Reset</button></div><div class="szs"><span>15%</span><span>100%</span><span>140%</span></div>' + grpHtml() + '<div class="bar" style="justify-content:flex-end"><button data-close>Done</button></div></div>';
+    ov.innerHTML = '<div class="mb stg" role="dialog" aria-modal="true" aria-label="Settings" style="max-height:88vh;overflow:auto"><h2>Settings</h2><p class="m">Appearance</p><div class="seg"><button data-t="light">Light</button><button data-t="dark">Dark</button></div><p class="m" style="margin-top:12px">Theme colour</p><div class="sw"><button class="swb" data-c="" aria-label="Default colours" title="Default" style="background:linear-gradient(135deg,#F3D1B5 50%,#9E3434 50%)"></button>' + [['#2B6CB0','Ocean'],['#2F7D4F','Forest'],['#7B4BB7','Grape'],['#D6457A','Rose'],['#D9822B','Sunset']].map(function (c) { return '<button class="swb" data-c="' + c[0] + '" aria-label="' + c[1] + '" title="' + c[1] + '" style="background:' + c[0] + '"></button>'; }).join('') + '<input type="color" data-accent aria-label="Pick any colour" value="#9e3434"></div><p class="m" style="margin-top:12px">Secondary colour <span class="m">(header gradient and highlights)</span></p><div class="sw"><button class="swb" data-c2="" aria-label="Default secondary colour" title="Default" style="background:linear-gradient(135deg,#F3D1B5 50%,#3E9C93 50%)"></button>' + [['#E8735A','Coral'],['#EDB445','Sun'],['#4C8FD6','Sky'],['#9B7BD0','Lilac'],['#E0508A','Pink']].map(function (c) { return '<button class="swb" data-c2="' + c[0] + '" aria-label="' + c[1] + '" title="' + c[1] + '" style="background:' + c[0] + '"></button>'; }).join('') + '<input type="color" data-accent2 aria-label="Pick any secondary colour" value="#3e9c93"></div><p class="m" style="margin-top:12px">Font</p><select class="w" data-font aria-label="Font">' + window.__fonts.map(function (f) { return '<option value="' + f[0] + '">' + (f[0] === 'Fredoka' ? 'Fredoka (default)' : f[0] === 'System' ? 'System (your phone\'s font)' : f[0]) + '</option>'; }).join('') + '</select><p class="m" data-fprev style="margin:6px 0 0">The quick brown fox jumps over 12 lazy dogs: RM 38.50</p><p class="m" style="margin-top:12px">Text size: <b data-szv>100%</b></p><div class="szr"><input type="range" min="15" max="140" step="5" value="100" data-szr aria-label="Text size percentage"><button class="s" data-szreset>Reset</button></div><div class="szs"><span>15%</span><span>100%</span><span>140%</span></div>' + grpHtml() + '<div class="bar" style="justify-content:flex-end"><button data-close>Done</button></div></div>';
     function mark() { ov.querySelectorAll('[data-t]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-t') === cur()); }); }
     function close() { document.removeEventListener('keydown', kd, true); ov.remove(); }
     function kd(e) { if (e.key === 'Escape') close(); }
@@ -204,7 +210,15 @@ input,select,textarea{font-size:max(16px,1rem)}
     function setA(v) { try { if (v) localStorage.setItem('accent', v); else localStorage.removeItem('accent'); } catch (e) {} if (window.__accent) window.__accent(); markA(); }
     ov.querySelectorAll('[data-c]').forEach(function (b) { b.onclick = function () { setA(b.getAttribute('data-c')); }; });
     ov.querySelector('[data-accent]').oninput = function (e) { setA(e.target.value); };
-    markA();
+    function acc2() { try { return (localStorage.getItem('accent2') || '').toLowerCase(); } catch (e) { return ''; } }
+    function markB() {
+      ov.querySelectorAll('[data-c2]').forEach(function (b) { b.classList.toggle('on', (b.getAttribute('data-c2') || '').toLowerCase() === acc2()); });
+      var ci = ov.querySelector('[data-accent2]'); if (ci && acc2()) ci.value = acc2();
+    }
+    function setB(v) { try { if (v) localStorage.setItem('accent2', v); else localStorage.removeItem('accent2'); } catch (e) {} if (window.__accent) window.__accent(); markB(); }
+    ov.querySelectorAll('[data-c2]').forEach(function (b) { b.onclick = function () { setB(b.getAttribute('data-c2')); }; });
+    ov.querySelector('[data-accent2]').oninput = function (e) { setB(e.target.value); };
+    markA(); markB();
     var fs = ov.querySelector('[data-font]');
     try { fs.value = localStorage.getItem('font') || 'Fredoka'; } catch (e) {}
     if (!fs.value) fs.value = 'Fredoka';
