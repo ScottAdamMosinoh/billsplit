@@ -107,8 +107,9 @@ a.ebtn{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-ite
 .eh{flex:none;background:rgba(255,255,255,.22);color:var(--onhd);box-shadow:none;border-radius:999px;padding:7px 14px;font-size:.9rem}
 .li{display:flex;justify-content:space-between;gap:10px;font-size:.9rem;color:var(--mute);padding:1px 0}
 .tag.ok{background:var(--teal);color:#331E1D;transform:none}
-.big2{font-size:1.8rem;font-weight:700;line-height:1.1;margin:2px 0 6px}.yours{background:var(--accbg)}
+.amtline{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:2px 0 6px}.amtline .big2{margin:0}.big2{font-size:1.8rem;font-weight:700;line-height:1.1;margin:2px 0 6px}.yours{background:var(--accbg)}
 .who{border-bottom:2px dashed var(--line)}.who:last-of-type{border-bottom:0}
+button.sm{padding:6px 12px;font-size:.88rem;flex:none}
 </style>
 </head>
 <body>
@@ -687,22 +688,21 @@ function viewDetail(id) {
     const date = b.date || iso(b.created || Date.now());
     const nice = (() => { try { return new Date(date + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); } catch (e) { return date; } })();
     const L = n => (lines[n] || []).map(x => `<div class="li"><span>${esc(x.t)}</span><span>${fmt(x.a, cu)}</span></div>`).join('');
-    const status = n => {
+    const act = n => {
       if (n === pay) return '<span class="tag ok">Paid the bill</span>';
       if (!canSettle) return `<span class="m">owes ${esc(pay || '?')}</span>`;
-      const rem = left(n);
-      if (rem > 0.005) return `<button data-a="sp" data-n="${esc(n)}">Settle up ${fmt(rem, cu)}</button>`;
-      return `<span class="tag ok">Settled</span>${paid(n) > 0 ? ` <button class="s" data-a="su" data-n="${esc(n)}">Undo</button>` : ''}`;
+      return left(n) > 0.005 ? `<button class="sm" data-a="sp" data-n="${esc(n)}">Settle up</button>` : '<span class="tag ok">Settled</span>';
     };
+    const undo = n => (n !== pay && canSettle && left(n) <= 0.005 && paid(n) > 0) ? `<div class="bar" style="margin:2px 0 8px"><button class="s" data-a="su" data-n="${esc(n)}">Undo payment</button></div>` : '';
     const people = Object.keys(c.per).filter(n => c.per[n] > 0.005).sort((x, y) => (y === pay) - (x === pay) || c.per[y] - c.per[x]);
     let mine = '';
     if (tripId && !me) mine = '<div class="card"><p class="m">Pick your name on the Members tab to see your own share here.</p></div>';
     else if (me && c.per[me] > 0.005) {
-      mine = `<div class="card yours"><h2>Your share</h2><div class="big2">${fmt(c.per[me], cu)}</div>${me === pay ? `<p class="m">You paid this expense, so everyone else owes you.</p>` : `<p class="m">You owe <b>${esc(pay || 'the payer')}</b> for:</p>`}${L(me)}${me !== pay && canSettle ? `<div class="bar">${status(me)}</div>` : ''}</div>`;
+      mine = `<div class="card yours"><h2>Your share</h2><div class="amtline"><div class="big2">${fmt(c.per[me], cu)}</div>${me !== pay ? act(me) : ''}</div>${me === pay ? `<p class="m">You paid this expense, so everyone else owes you.</p>` : `<p class="m">You owe <b>${esc(pay || 'the payer')}</b> for:</p>`}${L(me)}${undo(me)}</div>`;
     } else if (me) mine = '<div class="card"><p class="m">You are not part of this expense.</p></div>';
     const its = b.mode === 'whole' ? '' : Object.values(b.items || {}).sort((x, y) => (x.o || 0) - (y.o || 0));
     const itemsCard = its && its.length ? `<div class="card"><h2>Items</h2>${its.map(i => `<div class="row"><span class="n">${esc(i.name)}<br><span class="m">${(i.claims || []).length ? esc((i.claims || []).join(', ')) : 'Not assigned yet'}</span></span><span class="amt">${fmt(i.price, cu)}</span></div>`).join('')}<p class="m">${b.fee != null ? 'Service charge and taxes: ' + b.fee + '%' : ''}</p></div>` : '';
-    const all = `<div class="card"><h2>Who owes what</h2>${people.map(n => `<div class="who"><div class="row" style="border:0;padding:6px 0 2px"><span class="n"><b>${esc(n)}</b>${n === me ? ' <span class="tag">You</span>' : ''}</span><span class="amt"><b>${fmt(c.per[n], cu)}</b></span></div>${L(n)}<div class="bar" style="margin:6px 0 10px">${status(n)}</div></div>`).join('') || '<p class="m">Nobody has been assigned a share yet.</p>'}${c.unclaimed > 0.005 ? `<p class="m"><b>${fmt(c.unclaimed, cu)}</b> of items are not assigned to anyone yet.</p>` : ''}</div>`;
+    const all = `<div class="card"><h2>Who owes what</h2>${people.map(n => `<div class="who"><div class="row" style="border:0;padding:6px 0 2px"><span class="n"><b>${esc(n)}</b>${n === me ? ' <span class="tag">You</span>' : ''}</span><span class="amt"><b>${fmt(c.per[n], cu)}</b></span>${act(n)}</div>${L(n)}${undo(n)}<div style="height:8px"></div></div>`).join('') || '<p class="m">Nobody has been assigned a share yet.</p>'}${c.unclaimed > 0.005 ? `<p class="m"><b>${fmt(c.unclaimed, cu)}</b> of items are not assigned to anyone yet.</p>` : ''}</div>`;
     app.innerHTML = `<div class="hd hd2l"><h1><a href="#/${tripId ? 't/' + esc(tripId) : ''}" aria-label="Back">‹</a> ${esc(b.name)}${b.lock ? ' <span class="tag">Locked</span>' : ''}</h1><div class="hrow"><p class="m">${esc(nice)}${pay ? ' · ' + esc(pay === me ? 'You' : pay) + ' paid <b class="sp">' + fmt(c.total, cu) + '</b>' : ' · <b class="sp">' + fmt(c.total, cu) + '</b>'}</p><button class="eh" data-a="ed" aria-label="Edit this expense">✎ Edit</button></div></div>`
       + mine + all + itemsCard
       + (b.fx && b.fx.amt ? `<div class="card"><p class="m">Actually charged <b>${fmt(b.fx.amt, b.fx.cur)}</b> for this expense.</p></div>` : '')
