@@ -83,6 +83,7 @@ button{transition:transform .15s cubic-bezier(.34,1.56,.64,1)}button:active{tran
 @keyframes fall{to{transform:translateY(160px) rotate(540deg);opacity:0}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 body{padding-bottom:150px}
+.tap{cursor:pointer}.tap:active{background:var(--accbg);border-radius:14px}.chev{font-size:1.6rem;line-height:1;color:var(--teal);font-weight:700;margin-left:2px}
 </style>
 </head>
 <body>
@@ -360,8 +361,7 @@ function viewTrip(id) {
         const top = (done ? `<div class="card sq">${cf}<b>All square! 🎉</b><p class="m">Everyone is settled up in ${c}.</p></div>` : '') +
           (done ? '' : me ? `<div class="sum"><div class="o">You're owed<b>${fmt(Math.max(0, mine), c)}</b></div><div class="w">You owe<b>${fmt(Math.max(0, -mine), c)}</b></div></div>` : '') +
           (done ? '' : `<div class="card"><h2>Settled so far (${c})</h2><div class="prog"><i style="width:${pct}%"></i></div><p class="m">${pct}% settled</p></div>`);
-        return top + `<div class="card"><h2>Balances (${c})</h2>${trip.members.map(n => { const v = bal[n] || 0; return `<div class="row"><span class="n">${esc(n)}</span><span class="amt ${v > 0.005 ? 'pos' : v < -0.005 ? 'neg' : ''}">${v > 0.005 ? 'gets back ' + fmt(v, c) : v < -0.005 ? 'owes ' + fmt(-v, c) : 'settled up'}</span></div>`; }).join('') || '<p class="m">Add people in the Members tab first.</p>'}</div>
-      <div class="card"><h2>Settle up (${c})</h2>${suggest(bal).map(s => `<div class="row"><span class="n">${esc(s.from)} pays ${esc(s.to)}</span><span class="amt">${fmt(s.amt, c)}</span><button data-a="st" data-f="${esc(s.from)}" data-t="${esc(s.to)}" data-v="${s.amt}" data-c="${c}">Settle up</button></div>`).join('') || '<p class="m">Everyone is settled up.</p>'}</div>`; }).join('')
+        return top + `<div class="card"><h2>Balances (${c})</h2>${trip.members.map(n => { const v = bal[n] || 0; const open_ = Math.abs(v) > 0.005; return `<div class="row${open_ ? ' tap' : ''}"${open_ ? ` role="button" tabindex="0" data-a="bp" data-n="${esc(n)}" data-c="${c}" aria-label="Settle up ${esc(n)}"` : ''}><span class="n">${esc(n)}</span><span class="amt ${v > 0.005 ? 'pos' : v < -0.005 ? 'neg' : ''}">${v > 0.005 ? 'gets back ' + fmt(v, c) : v < -0.005 ? 'owes ' + fmt(-v, c) : 'settled up'}</span>${open_ ? '<span class="chev" aria-hidden="true">›</span>' : ''}</div>`; }).join('') || '<p class="m">Add people in the Members tab first.</p>'}</div>${out < 0.005 ? '' : '<p class="m" style="text-align:center;margin:-4px 0 8px">Tap a name to settle up</p>'}`; }).join('')
       + (sets.length ? '<div class="card"><h2>Recorded payments</h2>' + sets.map((s, i) => `<div class="row"><span class="n m">${esc(s.from)} paid ${esc(s.to)} ${fmt(s.amt, s.cur)}</span><button class="x" data-a="us" data-i="${i}">Undo</button></div>`).join('') + '</div>' : '');
     } else {
       let fxUI = '';
@@ -415,6 +415,23 @@ function viewTrip(id) {
     cl: el => copy(link('t', id), el),
     am: () => { const n = (prompt('Name') || '').trim(); if (n) ref.update({ members: FV.arrayUnion(n) }); },
     st: el => { ref.update({ settlements: FV.arrayUnion({ from: el.dataset.f, to: el.dataset.t, amt: +el.dataset.v, cur: el.dataset.c, t: Date.now() }) }); },
+    bp: el => {
+      const n = el.dataset.n, c = el.dataset.c;
+      const bal = balances(bills, trip.settlements || [], c);
+      const list = suggest(bal).filter(x => x.from === n || x.to === n);
+      const ov = document.createElement('div'); ov.className = 'ov';
+      ov.innerHTML = `<div class="mb" role="dialog" aria-modal="true" aria-label="Settle up ${esc(n)}"><h2>Settle up: ${esc(n)}</h2>${list.map((x, i) => `<div class="row"><span class="n">${x.from === n ? esc(n) + ' pays ' + esc(x.to) : esc(x.from) + ' pays ' + esc(n)}</span><span class="amt">${fmt(x.amt, c)}</span><button data-i="${i}">Settle up</button></div>`).join('') || '<p class="m">Nothing to settle.</p>'}<div class="bar" style="justify-content:flex-end"><button class="s" data-close>Close</button></div></div>`;
+      const close = () => { document.removeEventListener('keydown', kd, true); ov.remove(); };
+      const kd = e => { if (e.key === 'Escape') close(); };
+      ov.addEventListener('click', e => {
+        if (e.target === ov || e.target.closest('[data-close]')) return close();
+        const b = e.target.closest('button[data-i]'); if (!b) return;
+        const x = list[+b.dataset.i]; close();
+        ref.update({ settlements: FV.arrayUnion({ from: x.from, to: x.to, amt: x.amt, cur: c, t: Date.now() }) });
+      });
+      document.addEventListener('keydown', kd, true);
+      document.body.appendChild(ov);
+    },
     us: async el => {
       const list = trip.settlements || [], i = +el.dataset.i, s = list[i];
       if (!s) return;
