@@ -317,17 +317,42 @@ async function prepPhoto(file) {
   return cv;
 }
 const SKIP = /total|tax|sst|gst|service|svc|change|cash|round|paid|payment|tender|discount|balance|visa|master|card|invoice|receipt|table|cashier|date|time|tel|phone|thank|amount|qty|item/i;
-function parseReceipt(text) {
-  const out = [];
+const LANGS = [['en', 'English (no translation)', 'eng'], ['zh-CN', 'Chinese (Simplified)', 'chi_sim+eng'], ['zh-TW', 'Chinese (Traditional)', 'chi_tra+eng'], ['ja', 'Japanese', 'jpn+eng'], ['ko', 'Korean', 'kor+eng'], ['th', 'Thai', 'tha+eng'], ['ms', 'Malay', 'eng'], ['id', 'Indonesian', 'eng'], ['vi', 'Vietnamese', 'vie+eng'], ['es', 'Spanish', 'spa+eng'], ['fr', 'French', 'fra+eng'], ['de', 'German', 'deu+eng'], ['it', 'Italian', 'ita+eng'], ['pt', 'Portuguese', 'por+eng']];
+const SKIPX = /合計|合计|总计|總計|小計|小计|消費税|消费税|税|稅|お釣|釣り|找零|找錢|现金|現金|会計|領収|レシート|日付|電話|电话|合计|합계|소계|부가세|현금|거스름|카드|영수증|ยอดรวม|ภาษี|เงินทอน|เงินสด|ส่วนลด|impuesto|propina|cambio|efectivo|tarjeta|montant|espèces|rendu|summe|mwst|rückgeld|karte|imposta|contanti|totale|troco|dinheiro|cartão|jumlah|baki|tunai|cukai|kembali|tổng|thuế|tiền mặt/i;
+function parseReceipt(text, lang = 'en') {
+  const out = [], intOK = ['ja', 'ko', 'vi', 'id'].includes(lang);
   text.split('\n').forEach(line => {
     const t = line.replace(/\s+/g, ' ').trim();
-    const m = t.match(/^(.*?)\s*(?:RM|\$)?\s*(\d{1,5}[.,]\d{2})\s*[A-Za-z]{0,2}$/);
-    if (!m) return;
-    const name = m[1].replace(/[|_~=*]+/g, ' ').replace(/\s*(RM|\$)$/i, '').replace(/[\s.:-]+$/, '').trim();
-    if (name.length < 2 || !/[A-Za-z]/.test(name) || SKIP.test(name)) return;
-    out.push({ n: name, p: m[2].replace(',', '.') });
+    let name, price;
+    const m = t.match(/^(.*?)\s*(?:RM|\$|[¥￥€£฿₩])?\s*(\d{1,5}[.,]\d{2})\s*[A-Za-z]{0,2}$/);
+    if (m) { name = m[1]; price = m[2].replace(',', '.'); }
+    else if (intOK) {
+      const k = t.match(/^(.*?)\s*[¥￥₩₫]?\s*(\d{1,3}(?:[,.]\d{3})+|\d{2,6})\s*(?:円|원|₫|đ|VND|JPY|KRW|IDR)?$/);
+      if (k) { name = k[1]; price = k[2].replace(/[,.]/g, ''); }
+    }
+    if (!name) return;
+    name = name.replace(/[|_~=*]+/g, ' ').replace(/\s*(RM|\$|[¥￥€£฿₩])$/i, '').replace(/[\s.:-]+$/, '').trim();
+    const cjk = /[\u3000-\u9fff\uac00-\ud7af\u0e00-\u0e7f]/.test(name);
+    if ([...name].length < (cjk ? 1 : 2) || !/\p{L}/u.test(name) || SKIP.test(name) || (lang !== 'en' && SKIPX.test(name))) return;
+    out.push({ n: name, p: price });
   });
   return out;
+}
+const decodeEnt = x => { const e = document.createElement('textarea'); e.innerHTML = x; return e.value; };
+async function translateRows(rows, src) {
+  if (src === 'en' || !rows.length) return { rows, ok: true };
+  let ok = true, i = 0; const res = [...rows];
+  const tr = async txt => {
+    const r = await fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(txt) + '&langpair=' + src + '|en');
+    if (!r.ok) throw new Error('http');
+    const j = await r.json(), out = j && j.responseData && j.responseData.translatedText;
+    if (!out || String(j.responseStatus) !== '200' || /MYMEMORY WARNING|INVALID|PLEASE SELECT/i.test(out)) throw new Error('translate');
+    return decodeEnt(out).replace(/\s+/g, ' ').trim().slice(0, 60);
+  };
+  await Promise.all(Array.from({ length: 4 }, async () => {
+    while (i < res.length) { const k = i++; try { const n = await tr(res[k].n); if (n) res[k] = { ...res[k], n }; } catch (e) { ok = false; } }
+  }));
+  return { rows: res, ok };
 }
 
 // ---------- routing ----------
@@ -664,7 +689,7 @@ async function viewExpense(id, tripId) {
       main = `<div class="card"><h2>Fees on the whole bill</h2><div class="f feebox"><input type="number" inputmode="decimal" step="0.01" min="0" data-f="fee" placeholder="Service charge + taxes" title="Service charge + taxes" aria-label="Service charge plus taxes, percent" value="${esc(d.fee)}"><span class="pct" aria-hidden="true">%</span></div><p class="m" id="feeLine"></p><hr class="sep">
       <h2 style="margin-top:6px">Items</h2>${d.items.map((it, i) => `<div class="f"><input data-f="in" data-i="${i}" placeholder="Item" aria-label="Item name" value="${esc(it.n)}"><input type="number" inputmode="decimal" step="0.01" min="0" style="width:84px" data-f="ip" data-i="${i}" placeholder="Cost" aria-label="Cost" value="${esc(it.p)}"><button class="s" data-a="who" data-i="${i}" aria-label="Who bought this">${HEAD}${it.c.length ? ' ' + it.c.length : ''}</button><button class="x" data-a="rmv" data-i="${i}" aria-label="Remove row">✕</button></div>
       ${ui.who === i ? `<div class="dd"><div class="ph"><b>Who bought this?</b><span><button class="s" data-a="wa">${M.every(m => it.c.includes(m)) ? 'Unselect all' : 'Select all'}</button> <button data-a="wd">Done</button></span></div>${ticks(M, it.c, 'wt')}</div>` : ''}`).join('')}
-      <div class="bar"><button class="s" data-a="addrow">+ Add row</button><button class="s" data-a="cam">Scan receipt</button><button class="s" data-a="gal">From gallery</button></div><p class="m" id="scm">${esc(scanning)}</p><p class="m" id="tot"></p></div>`;
+      <div class="bar"><button class="s" data-a="addrow">+ Add row</button><button class="s" data-a="cam">Scan receipt</button><button class="s" data-a="gal">From gallery</button></div><div class="row" style="border:0;padding:6px 0 0"><span class="m">Receipt language</span><select data-f="rlang" aria-label="Receipt language">${LANGS.map(l => `<option value="${l[0]}" ${(d.rlang || ls.get('rlang', 'en')) === l[0] ? 'selected' : ''}>${l[1]}</option>`).join('')}</select></div><p class="m" id="scm">${esc(scanning)}</p><p class="m" id="tot"></p></div>`;
     }
     const fxCard = `<div class="card"><h2>Actual amount charged (optional)</h2><p class="m">What your card or bank really charged, in another currency. It only feeds your conversion rate on the Members page and never changes the split.</p><div class="f"><input type="number" inputmode="decimal" step="0.01" min="0" data-f="fxAmt" placeholder="Amount" aria-label="Actual amount charged" value="${esc(d.fxAmt)}"><select data-f="fxCur" aria-label="Currency charged">${CURS.map(c => `<option ${c === d.fxCur ? 'selected' : ''}>${c}</option>`).join('')}</select></div></div>`;
     const dateCard = `<div class="card"><h2>Date</h2><input class="w" type="date" data-f="date" aria-label="Expense date" value="${esc(d.date)}"></div>`;
@@ -710,12 +735,19 @@ async function viewExpense(id, tripId) {
     scanning = 'Preparing photo...'; draw();
     try {
       const [T, cv] = await Promise.all([loadTess(), prepPhoto(f)]);
-      const r = await T.recognize(cv, 'eng', { logger: m => { if (m.status === 'recognizing text' && scanHook === scanFile) { const e = document.getElementById('scm'); if (e) e.textContent = 'Reading receipt ' + Math.round(m.progress * 100) + '%'; } } });
+      const rl = d.rlang || ls.get('rlang', 'en'), lg = LANGS.find(x => x[0] === rl) || LANGS[0];
+      const r = await T.recognize(cv, lg[2], { logger: m => { if (m.status === 'recognizing text' && scanHook === scanFile) { const e = document.getElementById('scm'); if (e) e.textContent = 'Reading receipt ' + Math.round(m.progress * 100) + '%'; } } });
       if (scanHook !== scanFile) return;
-      const rows = parseReceipt(r.data.text);
+      let rows = parseReceipt(r.data.text, lg[0]), tmsg = '';
+      if (lg[0] !== 'en' && rows.length) {
+        scanning = 'Translating to English...'; const el = document.getElementById('scm'); if (el) el.textContent = scanning;
+        const tt = await translateRows(rows, lg[0]); rows = tt.rows;
+        if (!tt.ok) tmsg = ' Some names could not be translated and were kept as scanned.';
+      }
+      if (scanHook !== scanFile) return;
       d.items = d.items.filter(x => x.n || x.p).concat(rows.map(x => ({ n: x.n, p: x.p, c: [] })));
       if (!d.items.length) d.items = [{ n: '', p: '', c: [] }];
-      scanning = rows.length ? rows.length + ' items added. Check names and prices below.' : 'No items found. Try a flatter, brighter photo, or add items by hand.';
+      scanning = rows.length ? rows.length + ' items added. Check names and prices below.' + tmsg : 'No items found. Try a flatter, brighter photo, or add items by hand.';
     } catch (e) { if (scanHook !== scanFile) return; scanning = 'Scan failed: ' + e.message; }
     draw();
   };
@@ -768,7 +800,7 @@ async function viewExpense(id, tripId) {
     else d[f] = t.value;
     hint();
   };
-  app.onchange = e => { const t = e.target; if (t.tagName === 'SELECT' && t.dataset.f) { d[t.dataset.f] = t.value; draw(); } };
+  app.onchange = e => { const t = e.target; if (t.tagName === 'SELECT' && t.dataset.f) { d[t.dataset.f] = t.value; if (t.dataset.f === 'rlang') ls.set('rlang', t.value); draw(); } };
   app.onkeydown = e => {
     if (e.key === 'Escape' && (ui.menu || ui.who !== null)) { ui.menu = false; ui.who = null; draw(); return; }
     if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('item')) { e.preventDefault(); e.target.click(); }
