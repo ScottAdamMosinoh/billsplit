@@ -88,6 +88,7 @@ body{padding-bottom:150px}
 .card,.dd,.row{min-width:0}input[type=date]{-webkit-appearance:none;appearance:none;display:block;width:100%;max-width:100%;min-width:0;min-height:44px;text-align:left;line-height:1.2}input[type=date]::-webkit-date-and-time-value{text-align:left;min-height:1.2em}
 .row select{max-width:46%}
 .rad{display:inline-block;width:20px;height:20px;border-radius:50%;box-shadow:inset 0 0 0 2px var(--line);margin-right:10px;vertical-align:-4px;flex:none}.rad.on{background:radial-gradient(var(--acc) 0 42%,transparent 46%);box-shadow:inset 0 0 0 2px var(--acc)}.row .n.tap{padding:4px 0}.row .x{font-size:1.15rem}
+.ph3{display:flex;justify-content:space-between;align-items:center;gap:10px}.ph3 h2{margin:0}
 </style>
 </head>
 <body>
@@ -425,12 +426,8 @@ function viewTrip(id) {
           return `<div class="dd"><table class="tb"><tr><th>Name</th><th>Rate</th><th>${h.f}</th><th>${h.t}</th><th>Sources</th></tr>${rows.map((r, i) => { const x = dir(r.s, k); return `<tr class="${i === 0 && rows.length > 1 ? 'pos' : ''}"><td>${esc(r.n)}${i === 0 && rows.length > 1 ? ' (best)' : ''}</td><td>${(x.tt / x.ft).toPrecision(6)}</td><td>${x.ft.toFixed(2)}</td><td>${x.tt.toFixed(2)}</td><td>${r.s.e + r.s.c}</td></tr>`; }).join('')}<tr class="grp"><td>Group</td><td>${(gx.tt / gx.ft).toPrecision(6)}</td><td>${gx.ft.toFixed(2)}</td><td>${gx.tt.toFixed(2)}</td><td>${g.n}</td></tr></table><p class="m">Best means the most ${rc1 ? s0.c1 : s0.c2} received per ${rc1 ? s0.c2 : s0.c1} paid.</p></div>`;
         };
         const mc = (trip.conversions || []).filter(c => c.who === me);
-        fxUI = `<div class="card"><h2>Weighted average conversion rate</h2>${keys.length ? keys.map(k => { const x = dir(mine[k], k), s = mine[k]; return `<div class="row"><span class="n"><b>${x.f} to ${x.t} ${(x.tt / x.ft).toPrecision(6)}</b><br><span class="m">${fmt(x.ft, x.f)} from ${s.e} expense${s.e === 1 ? '' : 's'}${s.c ? ', ' + s.c + ' cash' : ''}</span></span><button class="s rnd" data-a="inv" data-k="${k}" aria-label="Invert currency pair">⇄</button><button class="s rnd" data-a="cmp" data-k="${k}" aria-label="Compare with the group">${TBL}</button></div>${cmp === k ? table(k) : ''}`; }).join('') : '<p class="m">No pairs yet. Add an actual amount to an expense you paid, or log a cash conversion below.</p>'}</div>
-        <div class="card"><h2>Cash conversions</h2><p class="m">Cash you exchanged. It counts towards your rate above.</p>
-        <div class="f"><input type="number" inputmode="decimal" step="0.01" min="0" data-f="ba" placeholder="Amount bought" aria-label="Amount bought" value="${esc(cv.ba)}"><select data-f="bc" aria-label="Currency bought">${opts(cv.bc)}</select></div>
-        <div class="f"><input type="number" inputmode="decimal" step="0.01" min="0" data-f="pa" placeholder="Amount paid" aria-label="Amount paid" value="${esc(cv.pa)}"><select data-f="pc" aria-label="Currency paid with">${opts(cv.pc)}</select></div>
-        <div class="bar"><button data-a="ca">Add conversion</button></div>
-        ${mc.map(c => `<div class="row"><span class="n m">Bought ${fmt(c.buyAmt, c.buyCur)} for ${fmt(c.payAmt, c.payCur)}</span><button class="x" data-a="cd" data-id="${esc(c.id)}">Delete</button></div>`).join('')}</div>`;
+        const populated = keys.length > 0 || mc.length > 0;
+        fxUI = `<div class="card"><div class="ph3"><h2>Weighted average conversion rate</h2>${populated ? '<button class="s" data-a="cx" aria-label="Add a cash conversion">+ Add</button>' : ''}</div>${keys.length ? keys.map(k => { const x = dir(mine[k], k), s = mine[k]; return `<div class="row"><span class="n"><b>${x.f} to ${x.t} ${(x.tt / x.ft).toPrecision(6)}</b><br><span class="m">${fmt(x.ft, x.f)} from ${s.e} expense${s.e === 1 ? '' : 's'}${s.c ? ', ' + s.c + ' cash' : ''}</span></span><button class="s rnd" data-a="inv" data-k="${k}" aria-label="Invert currency pair">⇄</button><button class="s rnd" data-a="cmp" data-k="${k}" aria-label="Compare with the group">${TBL}</button></div>${cmp === k ? table(k) : ''}`; }).join('') : '<p class="m">No pairs yet. Add an actual amount to an expense you paid, or add a cash conversion.</p>'}${populated ? '' : '<div class="bar"><button data-a="cx">Add conversion</button></div>'}</div>`;
       }
       const spent = curs.map(c => fmt(bills.filter(b => (b.currency || 'MYR') === c).reduce((s, b) => s + calc(b).total, 0), c)).join(', ');
       body = `<div class="card"><h2>Members</h2><p class="m">Tap your name so the app knows who you are.</p>${trip.members.map(m => `<div class="row"><span class="n tap" role="button" tabindex="0" data-a="me" data-n="${esc(m)}" aria-label="I am ${esc(m)}"><span class="rad ${m === me ? 'on' : ''}"></span>${esc(m)}${m === me ? ' <span class="tag">You</span>' : ''}</span><button class="x" data-a="rn" data-n="${esc(m)}" aria-label="Rename ${esc(m)}">✎</button><button class="x" data-a="rmm" data-n="${esc(m)}" aria-label="Remove ${esc(m)}">✕</button></div>`).join('') || '<p class="m">Add everyone once; every expense reuses these names.</p>'}<div class="bar"><button class="s" data-a="am">Add a person</button></div></div>
@@ -448,13 +445,42 @@ function viewTrip(id) {
     me: el => { ls.set('me_' + id, el.dataset.n); draw(); },
     inv: el => { const f = ls.get('inv_' + id, {}); f[el.dataset.k] = !f[el.dataset.k]; ls.set('inv_' + id, f); draw(); },
     cmp: el => { cmp = cmp === el.dataset.k ? null : el.dataset.k; draw(); },
-    ca: () => {
-      const me = ls.get('me_' + id, ''), ba = parseFloat(cv.ba), pa = parseFloat(cv.pa);
-      if (!me) return alert('Pick your name first.');
-      if (!(ba > 0) || !(pa > 0)) return alert('Enter both amounts.');
-      if (cv.bc === cv.pc) return alert('Choose two different currencies.');
-      ref.update({ conversions: FV.arrayUnion({ id: rid(), who: me, buyCur: cv.bc, buyAmt: ba, payCur: cv.pc, payAmt: pa, t: Date.now() }) });
-      cv.ba = ''; cv.pa = ''; draw();
+    cx: () => {
+      const me = ls.get('me_' + id, '');
+      if (!me) return errBox('Pick your name first on the Members tab.');
+      const opts = v => CURS.map(c => `<option ${c === v ? 'selected' : ''}>${c}</option>`).join('');
+      const ov = document.createElement('div'); ov.className = 'ov';
+      ov.innerHTML = `<div class="mb" role="dialog" aria-modal="true" aria-label="Cash conversions" style="max-height:86vh;overflow:auto"><h2>Cash conversions</h2><p class="m">Cash you exchanged. It counts towards your rate.</p>
+        <div class="f"><input type="number" inputmode="decimal" step="0.01" min="0" data-ba placeholder="Amount bought" aria-label="Amount bought"><select data-bc aria-label="Currency bought">${opts(cv.bc)}</select></div>
+        <div class="f"><input type="number" inputmode="decimal" step="0.01" min="0" data-pa placeholder="Amount paid" aria-label="Amount paid"><select data-pc aria-label="Currency paid with">${opts(cv.pc)}</select></div>
+        <p class="m" data-msg style="min-height:1.2em;margin:6px 0 0"></p>
+        <div class="bar"><button data-add>Add conversion</button><button class="s" data-close>Close</button></div><div data-list></div></div>`;
+      const q = k => ov.querySelector(k), msg = t => { q('[data-msg]').textContent = t; };
+      const list = () => {
+        const mine = (trip.conversions || []).filter(c => c.who === me);
+        q('[data-list]').innerHTML = mine.length ? '<hr class="sep">' + mine.map(c => `<div class="row"><span class="n m">Bought ${fmt(c.buyAmt, c.buyCur)} for ${fmt(c.payAmt, c.payCur)}</span><button class="x" data-del="${esc(c.id)}">Delete</button></div>`).join('') : '';
+      };
+      const close = () => { document.removeEventListener('keydown', kd, true); ov.remove(); };
+      const kd = e => { if (e.key === 'Escape') close(); };
+      ov.addEventListener('click', async e => {
+        if (e.target === ov || e.target.closest('[data-close]')) return close();
+        const del = e.target.closest('[data-del]');
+        if (del) {
+          const cid = del.dataset.del;
+          try { await ref.update({ conversions: (trip.conversions || []).filter(c => c.id !== cid) }); const row = del.closest('.row'); if (row) row.remove(); if (!(trip.conversions || []).some(c => c.who === me && c.id !== cid)) q('[data-list]').innerHTML = ''; }
+          catch (err) { msg('Could not delete. Check your connection.'); }
+          return;
+        }
+        if (!e.target.closest('[data-add]')) return;
+        const ba = parseFloat(q('[data-ba]').value), pa = parseFloat(q('[data-pa]').value), bc = q('[data-bc]').value, pc = q('[data-pc]').value;
+        cv.bc = bc; cv.pc = pc;
+        if (!(ba > 0) || !(pa > 0)) return msg('Enter both amounts.');
+        if (bc === pc) return msg('Choose two different currencies.');
+        try { await ref.update({ conversions: FV.arrayUnion({ id: rid(), who: me, buyCur: bc, buyAmt: ba, payCur: pc, payAmt: pa, t: Date.now() }) }); close(); }
+        catch (err) { msg('Could not save. Check your connection and try again.'); }
+      });
+      document.addEventListener('keydown', kd, true);
+      document.body.appendChild(ov); list(); q('[data-ba]').focus();
     },
     cd: el => { const c = (trip.conversions || []).find(x => x.id === el.dataset.id); if (c) ref.update({ conversions: FV.arrayRemove(c) }); },
     nb: () => go('/n/' + id),
