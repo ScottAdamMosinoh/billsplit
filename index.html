@@ -699,7 +699,7 @@ function viewDetail(id) {
     const { c, cu, pay, lines, paid, left } = info(), me = meName(), canSettle = !!(tripId && pay);
     const date = b.date || iso(b.created || Date.now());
     const nice = (() => { try { return new Date(date + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); } catch (e) { return date; } })();
-    const L = n => (lines[n] || []).map(x => `<div class="li"><span>${esc(x.t)}</span><span>${fmt(x.a, cu)}</span></div>`).join('');
+    const L = n => (lines[n] || []).filter(x => x.t !== 'equal share').map(x => `<div class="li"><span>${esc(x.t)}</span><span>${fmt(x.a, cu)}</span></div>`).join('');
     const act = n => {
       if (n === pay) return '<span class="tag ok">Paid the bill</span>';
       if (!canSettle) return `<span class="m">owes ${esc(pay || '?')}</span>`;
@@ -710,7 +710,7 @@ function viewDetail(id) {
     let mine = '';
     if (tripId && !me) mine = '<div class="card"><p class="m">Pick your name on the Members tab to see your own share here.</p></div>';
     else if (me && c.per[me] > 0.005) {
-      mine = `<div class="card yours"><h2>Your share</h2><div class="amtline"><div class="big2">${fmt(c.per[me], cu)}</div>${me !== pay ? act(me) : ''}</div>${me === pay ? `<p class="m">You paid this expense, so everyone else owes you.</p>` : `<p class="m">You owe <b>${esc(pay || 'the payer')}</b> for:</p>`}${L(me)}${undo(me)}</div>`;
+      mine = `<div class="card yours"><h2>Your share</h2><div class="amtline"><div class="big2">${fmt(c.per[me], cu)}</div>${me !== pay ? act(me) : ''}</div>${me === pay ? `<p class="m">You paid this expense, so everyone else owes you.</p>` : `<p class="m">You owe <b>${esc(pay || 'the payer')}</b>${L(me) ? ' for:' : '.'}</p>`}${L(me)}${undo(me)}</div>`;
     } else if (me) mine = '<div class="card"><p class="m">You are not part of this expense.</p></div>';
     const its = b.mode === 'whole' ? '' : Object.values(b.items || {}).sort((x, y) => (x.o || 0) - (y.o || 0));
     const itemsCard = its && its.length ? `<div class="card"><h2>Items</h2>${its.map(i => `<div class="row"><span class="n">${esc(i.name)}<br><span class="m">${(i.claims || []).length ? esc((i.claims || []).join(', ')) : 'Not assigned yet'}</span></span><span class="amt">${fmt(i.price, cu)}</span></div>`).join('')}<p class="m">${b.fee != null ? 'Service charge and taxes: ' + b.fee + '%' : ''}</p></div>` : '';
