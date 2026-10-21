@@ -27,9 +27,8 @@ if(f[0]==='System'){r.style.setProperty('--font','system-ui,-apple-system,"Segoe
 r.style.setProperty('--font','"'+f[0]+'"');
 if(!document.getElementById('fl-'+f[0].replace(/\W/g,''))){var l=document.createElement('link');l.id='fl-'+f[0].replace(/\W/g,'');l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family='+f[1]+'&display=swap';document.head.appendChild(l)}}catch(e){}};
 window.__font();
-window.__sizes=[90,100,110,125,140,160];
 window.__fsize=function(){try{var v=parseInt(localStorage.getItem('fsize'),10),r=document.documentElement;
-if(window.__sizes.indexOf(v)<0||v===100){r.style.removeProperty('--fs');return}
+if(!(v>=15&&v<=140)||v===100){r.style.removeProperty('--fs');return}
 r.style.setProperty('--fs',String(v/100))}catch(e){}};
 window.__fsize();</script>
 <style>
@@ -130,6 +129,8 @@ button.sm{padding:6px 12px;font-size:.88rem;flex:none}
 html{font-size:calc(16px*var(--fs,1));-webkit-text-size-adjust:100%}
 input,select,textarea{font-size:max(16px,1rem)}
 .szr{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 4px}.szr b{min-width:3.2em;text-align:center}.szr button:disabled{opacity:.4;cursor:default}
+.szr{display:flex;align-items:center;gap:12px;margin:6px 0 0}.szr input[type=range]{flex:1;min-width:0;accent-color:var(--acc);height:28px}.szs{display:flex;justify-content:space-between;font-size:.75rem;color:var(--mute);margin-bottom:4px}
+.stg{font-size:16px!important}.stg *{font-size:inherit!important}.stg h2{font-size:20px!important}.stg .m,.stg .szs{font-size:14px!important}.stg button,.stg select{font-size:15px!important}.stg [data-fprev]{font-size:1rem!important}
 </style>
 </head>
 <body>
@@ -154,7 +155,7 @@ input,select,textarea{font-size:max(16px,1rem)}
       return '<h2 style="margin-top:16px">Group settings</h2><p class="m">Default currency for new expenses in this group</p><select class="w" data-gcur aria-label="Default currency">' + g.curs.map(function (c) { return '<option' + (c === g.cur ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select><p class="m" style="margin-top:10px">Header picture</p><div class="bar" style="margin-top:4px"><button data-cpick>Choose photo</button><button class="s" data-crem' + (g.cover ? '' : ' hidden') + '>Remove</button></div><input type="file" accept="image/*" data-cfile hidden><p class="m" data-gmsg style="min-height:1.2em;margin:6px 0 6px"></p>';
     }
     var ov = document.createElement('div'); ov.className = 'ov';
-    ov.innerHTML = '<div class="mb" role="dialog" aria-modal="true" aria-label="Settings" style="max-height:88vh;overflow:auto"><h2>Settings</h2><p class="m">Appearance</p><div class="seg"><button data-t="light">Light</button><button data-t="dark">Dark</button></div><p class="m" style="margin-top:12px">Theme colour</p><div class="sw"><button class="swb" data-c="" aria-label="Default colours" title="Default" style="background:linear-gradient(135deg,#F3D1B5 50%,#9E3434 50%)"></button>' + [['#2B6CB0','Ocean'],['#2F7D4F','Forest'],['#7B4BB7','Grape'],['#D6457A','Rose'],['#D9822B','Sunset']].map(function (c) { return '<button class="swb" data-c="' + c[0] + '" aria-label="' + c[1] + '" title="' + c[1] + '" style="background:' + c[0] + '"></button>'; }).join('') + '<input type="color" data-accent aria-label="Pick any colour" value="#9e3434"></div><p class="m" style="margin-top:12px">Font</p><select class="w" data-font aria-label="Font">' + window.__fonts.map(function (f) { return '<option value="' + f[0] + '">' + (f[0] === 'Fredoka' ? 'Fredoka (default)' : f[0] === 'System' ? 'System (your phone\'s font)' : f[0]) + '</option>'; }).join('') + '</select><p class="m" data-fprev style="margin:6px 0 0">The quick brown fox jumps over 12 lazy dogs: RM 38.50</p><p class="m" style="margin-top:12px">Text size</p><div class="szr"><button class="s" data-sz="-1" aria-label="Smaller text">A−</button><b data-szv aria-live="polite">100%</b><button class="s" data-sz="1" aria-label="Larger text">A+</button><button class="s" data-sz="0">Reset</button></div>' + grpHtml() + '<div class="bar" style="justify-content:flex-end"><button data-close>Done</button></div></div>';
+    ov.innerHTML = '<div class="mb stg" role="dialog" aria-modal="true" aria-label="Settings" style="max-height:88vh;overflow:auto"><h2>Settings</h2><p class="m">Appearance</p><div class="seg"><button data-t="light">Light</button><button data-t="dark">Dark</button></div><p class="m" style="margin-top:12px">Theme colour</p><div class="sw"><button class="swb" data-c="" aria-label="Default colours" title="Default" style="background:linear-gradient(135deg,#F3D1B5 50%,#9E3434 50%)"></button>' + [['#2B6CB0','Ocean'],['#2F7D4F','Forest'],['#7B4BB7','Grape'],['#D6457A','Rose'],['#D9822B','Sunset']].map(function (c) { return '<button class="swb" data-c="' + c[0] + '" aria-label="' + c[1] + '" title="' + c[1] + '" style="background:' + c[0] + '"></button>'; }).join('') + '<input type="color" data-accent aria-label="Pick any colour" value="#9e3434"></div><p class="m" style="margin-top:12px">Font</p><select class="w" data-font aria-label="Font">' + window.__fonts.map(function (f) { return '<option value="' + f[0] + '">' + (f[0] === 'Fredoka' ? 'Fredoka (default)' : f[0] === 'System' ? 'System (your phone\'s font)' : f[0]) + '</option>'; }).join('') + '</select><p class="m" data-fprev style="margin:6px 0 0">The quick brown fox jumps over 12 lazy dogs: RM 38.50</p><p class="m" style="margin-top:12px">Text size: <b data-szv>100%</b></p><div class="szr"><input type="range" min="15" max="140" step="5" value="100" data-szr aria-label="Text size percentage"><button class="s" data-szreset>Reset</button></div><div class="szs"><span>15%</span><span>100%</span><span>140%</span></div>' + grpHtml() + '<div class="bar" style="justify-content:flex-end"><button data-close>Done</button></div></div>';
     function mark() { ov.querySelectorAll('[data-t]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-t') === cur()); }); }
     function close() { document.removeEventListener('keydown', kd, true); ov.remove(); }
     function kd(e) { if (e.key === 'Escape') close(); }
@@ -208,18 +209,15 @@ input,select,textarea{font-size:max(16px,1rem)}
     try { fs.value = localStorage.getItem('font') || 'Fredoka'; } catch (e) {}
     if (!fs.value) fs.value = 'Fredoka';
     fs.onchange = function () { try { localStorage.setItem('font', fs.value); } catch (e) {} if (window.__font) window.__font(); };
-    function curSz() { var v = 100; try { v = parseInt(localStorage.getItem('fsize'), 10); } catch (e) {} return window.__sizes.indexOf(v) < 0 ? 100 : v; }
-    function showSz() {
-      var i = window.__sizes.indexOf(curSz()); ov.querySelector('[data-szv]').textContent = curSz() + '%';
-      ov.querySelector('[data-sz="-1"]').disabled = i <= 0; ov.querySelector('[data-sz="1"]').disabled = i >= window.__sizes.length - 1;
+    function curSz() { var v = 100; try { v = parseInt(localStorage.getItem('fsize'), 10); } catch (e) {} return v >= 15 && v <= 140 ? v : 100; }
+    var rg = ov.querySelector('[data-szr]');
+    function showSz() { rg.value = curSz(); ov.querySelector('[data-szv]').textContent = curSz() + '%'; }
+    function setSz(n) {
+      try { if (n === 100) localStorage.removeItem('fsize'); else localStorage.setItem('fsize', String(n)); } catch (e) {}
+      if (window.__fsize) window.__fsize(); showSz();
     }
-    ov.querySelectorAll('[data-sz]').forEach(function (b) {
-      b.onclick = function () {
-        var d = parseInt(b.getAttribute('data-sz'), 10), i = window.__sizes.indexOf(curSz()), n = d === 0 ? 100 : window.__sizes[Math.max(0, Math.min(window.__sizes.length - 1, i + d))];
-        try { if (n === 100) localStorage.removeItem('fsize'); else localStorage.setItem('fsize', String(n)); } catch (e) {}
-        if (window.__fsize) window.__fsize(); showSz();
-      };
-    });
+    rg.oninput = function () { setSz(parseInt(rg.value, 10)); };
+    ov.querySelector('[data-szreset]').onclick = function () { setSz(100); };
     showSz();
     ov.querySelector('[data-close]').onclick = close;
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
