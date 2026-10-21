@@ -87,6 +87,7 @@ body{padding-bottom:150px}
 .hd2l{padding-top:calc(env(safe-area-inset-top,0px) + 14px);padding-bottom:16px}.hd2l h1{margin:0}.hd2l h1 a{font-size:1.5rem;margin-right:4px}.hd2l .m{margin:4px 0 0}.hd2l h1{font-weight:700}.hd2l .sp{font-size:inherit;font-weight:600}
 .card,.dd,.row{min-width:0}input[type=date]{-webkit-appearance:none;appearance:none;display:block;width:100%;max-width:100%;min-width:0;min-height:44px;text-align:left;line-height:1.2}input[type=date]::-webkit-date-and-time-value{text-align:left;min-height:1.2em}
 .row select{max-width:46%}
+.rad{display:inline-block;width:20px;height:20px;border-radius:50%;box-shadow:inset 0 0 0 2px var(--line);margin-right:10px;vertical-align:-4px;flex:none}.rad.on{background:radial-gradient(var(--acc) 0 42%,transparent 46%);box-shadow:inset 0 0 0 2px var(--acc)}.row .n.tap{padding:4px 0}.row .x{font-size:1.15rem}
 </style>
 </head>
 <body>
@@ -432,9 +433,8 @@ function viewTrip(id) {
         ${mc.map(c => `<div class="row"><span class="n m">Bought ${fmt(c.buyAmt, c.buyCur)} for ${fmt(c.payAmt, c.payCur)}</span><button class="x" data-a="cd" data-id="${esc(c.id)}">Delete</button></div>`).join('')}</div>`;
       }
       const spent = curs.map(c => fmt(bills.filter(b => (b.currency || 'MYR') === c).reduce((s, b) => s + calc(b).total, 0), c)).join(', ');
-      body = `<div class="card"><h2>Members</h2><div class="chips">${trip.members.map(m => `<span class="chip">${esc(m)}</span>`).join('') || '<span class="m">Add everyone once; every expense reuses these names.</span>'}</div><div class="bar"><button class="s" data-a="am">Add a person</button></div></div>
-      ${trip.members.length ? `<div class="card"><h2>Who are you?</h2><div class="chips">${chips()}</div></div>` : ''}
-      ${fxUI}<div class="card"><h2>Group total</h2><div class="big">${spent}</div><p class="m">across ${bills.length} expense${bills.length === 1 ? '' : 's'}</p><div class="bar"><button class="s" data-a="cl">Copy group link</button></div></div>`;
+      body = `<div class="card"><h2>Members</h2><p class="m">Tap your name so the app knows who you are.</p>${trip.members.map(m => `<div class="row"><span class="n tap" role="button" tabindex="0" data-a="me" data-n="${esc(m)}" aria-label="I am ${esc(m)}"><span class="rad ${m === me ? 'on' : ''}"></span>${esc(m)}${m === me ? ' <span class="tag">You</span>' : ''}</span><button class="x" data-a="rn" data-n="${esc(m)}" aria-label="Rename ${esc(m)}">✎</button><button class="x" data-a="rmm" data-n="${esc(m)}" aria-label="Remove ${esc(m)}">✕</button></div>`).join('') || '<p class="m">Add everyone once; every expense reuses these names.</p>'}<div class="bar"><button class="s" data-a="am">Add a person</button></div></div>
+            ${fxUI}<div class="card"><h2>Group total</h2><div class="big">${spent}</div><p class="m">across ${bills.length} expense${bills.length === 1 ? '' : 's'}</p><div class="bar"><button class="s" data-a="cl">Copy group link</button></div></div>`;
     }
     const seg = (v, t, i) => `<button class="${tab === v ? 'on' : ''}" data-a="tab" data-v="${v}"><span class="ni">${i}</span>${t}</button>`;
     app.innerHTML = `<div class="hd hd2l"${coverCss}><h1><a href="#/" aria-label="Back to groups">‹</a> ${esc(trip.name)} ${emo}</h1><p class="m">${line}</p></div>${tab === 'x' ? meCard : ''}
@@ -459,6 +459,35 @@ function viewTrip(id) {
     cd: el => { const c = (trip.conversions || []).find(x => x.id === el.dataset.id); if (c) ref.update({ conversions: FV.arrayRemove(c) }); },
     nb: () => go('/n/' + id),
     cl: el => copy(link('t', id), el),
+    rn: async el => {
+      const old = el.dataset.n;
+      const v = await modal({ title: 'Rename', msg: 'Change "' + old + '" everywhere in this group: expenses, balances and payments.', fields: ['Name'], ok: 'Save', plain: true, value: old });
+      const nn = v && (v[0] || '').trim(); if (!nn || nn === old) return;
+      if (trip.members.some(m => m.toLowerCase() === nn.toLowerCase() && m !== old)) return errBox('Someone in this group is already called ' + nn + '.');
+      const sw = x => x === old ? nn : x, swk = o => { if (!o || !(old in o)) return o; const r = { ...o }; r[nn] = r[old]; delete r[old]; return r; };
+      const batch = db.batch();
+      batch.update(ref, { members: trip.members.map(sw), settlements: (trip.settlements || []).map(x => ({ ...x, from: sw(x.from), to: sw(x.to) })), conversions: (trip.conversions || []).map(x => ({ ...x, who: sw(x.who) })) });
+      bills.forEach(b => {
+        const u = {};
+        if (b.payer === old) u.payer = nn;
+        if ((b.even || []).includes(old)) u.even = b.even.map(sw);
+        if ((b.parts || []).includes(old)) u.parts = b.parts.map(sw);
+        if (b.pct && old in b.pct) u.pct = swk(b.pct);
+        if (b.amt && old in b.amt) u.amt = swk(b.amt);
+        if (b.items) { const it = {}; let hit = false; Object.entries(b.items).forEach(([k, i]) => { if ((i.claims || []).includes(old)) { hit = true; it[k] = { ...i, claims: i.claims.map(sw) }; } else it[k] = i; }); if (hit) u.items = it; }
+        if (Object.keys(u).length) batch.update(db.collection('bills').doc(b._id), u);
+      });
+      try { await batch.commit(); if (ls.get('me_' + id, '') === old) ls.set('me_' + id, nn); }
+      catch (e) { errBox('Could not rename. Check your connection and try again.'); }
+    },
+    rmm: el => {
+      const n = el.dataset.n;
+      const used = bills.filter(b => b.payer === n || (b.even || []).includes(n) || (b.parts || []).includes(n) || (b.pct && n in b.pct) || (b.amt && n in b.amt) || Object.values(b.items || {}).some(i => (i.claims || []).includes(n))).length
+        + (trip.settlements || []).filter(x => x.from === n || x.to === n).length + (trip.conversions || []).filter(x => x.who === n).length;
+      if (used) return errBox(n + ' is part of ' + used + ' expense' + (used === 1 ? '' : 's') + ' or payment' + (used === 1 ? '' : 's') + ', so can\'t be removed. Rename them instead, or delete those first.');
+      ref.update({ members: FV.arrayRemove(n) });
+      if (ls.get('me_' + id, '') === n) ls.set('me_' + id, '');
+    },
     am: () => { const n = (prompt('Name') || '').trim(); if (n) ref.update({ members: FV.arrayUnion(n) }); },
     st: el => { ref.update({ settlements: FV.arrayUnion({ from: el.dataset.f, to: el.dataset.t, amt: +el.dataset.v, cur: el.dataset.c, t: Date.now() }) }); },
     bp: el => {
@@ -504,10 +533,10 @@ async function hashPw(pw, saltHex) {
   const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 150000, hash: 'SHA-256' }, key, 256);
   return { salt: b2h(salt), hash: b2h(bits), it: 150000 };
 }
-function modal({ title, msg, fields = [], ok = 'OK', noCancel = false }) {
+function modal({ title, msg, fields = [], ok = 'OK', noCancel = false, plain = false, value = '' }) {
   return new Promise(res => {
     const ov = document.createElement('div'); ov.className = 'ov';
-    ov.innerHTML = `<div class="mb" role="dialog" aria-modal="true" aria-label="${esc(title)}"><h2>${esc(title)}</h2><p class="m">${esc(msg || '')}</p>${fields.map((f, i) => `<input class="w" type="password" data-k="${i}" placeholder="${esc(f)}" aria-label="${esc(f)}" autocomplete="off">`).join('')}${fields.length ? '<label class="m"><input type="checkbox" data-show style="width:auto"> Show password</label>' : ''}<div class="bar"><button data-ok>${esc(ok)}</button>${noCancel ? '' : '<button class="s" data-no>Cancel</button>'}</div></div>`;
+    ov.innerHTML = `<div class="mb" role="dialog" aria-modal="true" aria-label="${esc(title)}"><h2>${esc(title)}</h2><p class="m">${esc(msg || '')}</p>${fields.map((f, i) => `<input class="w" type="${plain ? 'text' : 'password'}" data-k="${i}" placeholder="${esc(f)}" aria-label="${esc(f)}" value="${esc(value)}" autocomplete="off" maxlength="${plain ? 30 : 200}">`).join('')}${fields.length && !plain ? '<label class="m"><input type="checkbox" data-show style="width:auto"> Show password</label>' : ''}<div class="bar"><button data-ok>${esc(ok)}</button>${noCancel ? '' : '<button class="s" data-no>Cancel</button>'}</div></div>`;
     const done = v => { document.removeEventListener('keydown', kd, true); ov.remove(); res(v); };
     const go_ = () => done(fields.length ? [...ov.querySelectorAll('input[data-k]')].map(i => i.value) : true);
     const kd = e => { if (e.key === 'Escape') done(null); else if (e.key === 'Enter') { e.preventDefault(); go_(); } };
