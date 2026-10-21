@@ -23,6 +23,8 @@ if(m)m.setAttribute('content',v['--hd'])}
 if(b){var s2=b.g?0:Math.round(Math.max(.35,b.s)*100);
 if(dk){v['--hd2']=H(b.h,Math.min(s2,70),36);v['--teal']=H(b.h,Math.min(s2,70),66)}
 else{var L2=Math.min(Math.max(Math.round(b.l*100),38),52);v['--hd2']=H(b.h,s2,Math.min(L2+4,54));v['--teal']=H(b.h,s2,L2)}}
+var fc=localStorage.getItem('fcolor_'+(dk?'dark':'light'))||'';
+if(/^#[0-9a-fA-F]{6}$/.test(fc)){var q=parseInt(fc.slice(1),16);v['--ink']=fc;v['--mute']='rgba('+(q>>16&255)+','+(q>>8&255)+','+(q&255)+',.76)'}
 for(var k in v)r.style.setProperty(k,v[k])}catch(e){}};
 window.__accent();
 window.__fonts=[['Fredoka','Fredoka:wght@400;500;600;700'],['Figtree','Figtree:wght@400;500;600;700'],['Nunito','Nunito:wght@400;500;600;700'],['Poppins','Poppins:wght@400;500;600;700'],['DM Sans','DM+Sans:wght@400;500;600;700'],['Lora','Lora:wght@400;500;600;700'],['Atkinson Hyperlegible','Atkinson+Hyperlegible:wght@400;700'],['System','']];
@@ -39,7 +41,7 @@ r.style.setProperty('--fs',String(v/100))}catch(e){}};
 window.__fsize();</script>
 <style>
 :root{color-scheme:light;--coral:#E8735A;--teal:#3E9C93;--sun:#EDB445;--hd2:#D2612F;--bg:#F3D1B5;--paper:#FCF0E6;--ink:#331E1D;--mute:#6A4F3A;--line:#E0B485;--acc:#9E3434;--accbg:#F0C9A6;--onacc:#FFF8F2;--warn:#6E4510;--warnbg:#F6DDBA;--bad:#9E3434;--pos:#2F6B3F;--hd:#9E3434;--onhd:#FCF0E6;--sh:rgba(51,30,29,.12)}
-:root[data-theme="dark"]{color-scheme:dark;--bg:#1F1312;--paper:#331E1D;--ink:#F3D1B5;--mute:#C2A184;--line:#4F3430;--acc:#E0B485;--accbg:#4A2F26;--onacc:#331E1D;--warn:#E0B485;--warnbg:#4A3524;--bad:#E58A80;--pos:#8FD6A0;--hd:#7F2B2B;--hd2:#A8431F;--coral:#F08A73;--teal:#5CBDB3;--sun:#F2C766;--onhd:#FCE9D8;--sh:rgba(0,0,0,.4)}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#0B1119;--paper:#102640;--ink:#E8E4EA;--mute:#A8B3C4;--line:#254060;--acc:#E5545C;--accbg:#1B3556;--onacc:#0B1119;--warn:#F2C766;--warnbg:#2C2B33;--bad:#F27A82;--pos:#8FD6A0;--hd:#B22A33;--hd2:#0B4F82;--coral:#E5545C;--teal:#5BA3DB;--sun:#F2C766;--onhd:#F4F0F5;--sh:rgba(0,0,0,.5)}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:1rem/1.45 var(--font,Fredoka),Figtree,system-ui,sans-serif;padding:0 0 96px}
 #app{max-width:560px;margin:0 auto;padding:0 12px}
@@ -152,7 +154,7 @@ input,select,textarea{font-size:max(16px,1rem)}
   function apply(t) {
     if (t === 'dark') root.setAttribute('data-theme', 'dark'); else root.removeAttribute('data-theme');
     try { localStorage.setItem('theme', t); } catch (e) {}
-    var m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute('content', t === 'dark' ? '#7F2B2B' : '#9E3434');
+    var m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute('content', t === 'dark' ? '#B22A33' : '#9E3434');
     if (window.__accent) window.__accent();
   }
   apply(cur());
@@ -163,11 +165,11 @@ input,select,textarea{font-size:max(16px,1rem)}
       return '<h2 style="margin-top:16px">Group settings</h2><p class="m">Default currency for new expenses in this group</p><select class="w" data-gcur aria-label="Default currency">' + g.curs.map(function (c) { return '<option' + (c === g.cur ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select><p class="m" style="margin-top:10px">Header picture</p><div class="bar" style="margin-top:4px"><button data-cpick>Choose photo</button><button class="s" data-crem' + (g.cover ? '' : ' hidden') + '>Remove</button></div><input type="file" accept="image/*" data-cfile hidden><p class="m" data-gmsg style="min-height:1.2em;margin:6px 0 6px"></p>';
     }
     var ov = document.createElement('div'); ov.className = 'ov';
-    ov.innerHTML = '<div class="mb stg" role="dialog" aria-modal="true" aria-label="Settings" style="max-height:88vh;overflow:auto"><h2>Settings</h2><p class="m">Appearance</p><div class="seg"><button data-t="light">Light</button><button data-t="dark">Dark</button></div><p class="m" style="margin-top:12px">Theme colour</p><div class="sw"><button class="swb" data-c="" aria-label="Default colours" title="Default" style="background:linear-gradient(135deg,#F3D1B5 50%,#9E3434 50%)"></button>' + [['#2B6CB0','Ocean'],['#2F7D4F','Forest'],['#7B4BB7','Grape'],['#D6457A','Rose'],['#D9822B','Sunset']].map(function (c) { return '<button class="swb" data-c="' + c[0] + '" aria-label="' + c[1] + '" title="' + c[1] + '" style="background:' + c[0] + '"></button>'; }).join('') + '<input type="color" data-accent aria-label="Pick any colour" value="#9e3434"></div><p class="m" style="margin-top:12px">Secondary colour <span class="m">(header gradient and highlights)</span></p><div class="sw"><button class="swb" data-c2="" aria-label="Default secondary colour" title="Default" style="background:linear-gradient(135deg,#F3D1B5 50%,#3E9C93 50%)"></button>' + [['#E8735A','Coral'],['#EDB445','Sun'],['#4C8FD6','Sky'],['#9B7BD0','Lilac'],['#E0508A','Pink']].map(function (c) { return '<button class="swb" data-c2="' + c[0] + '" aria-label="' + c[1] + '" title="' + c[1] + '" style="background:' + c[0] + '"></button>'; }).join('') + '<input type="color" data-accent2 aria-label="Pick any secondary colour" value="#3e9c93"></div><p class="m" style="margin-top:12px">Font</p><select class="w" data-font aria-label="Font">' + window.__fonts.map(function (f) { return '<option value="' + f[0] + '">' + (f[0] === 'Fredoka' ? 'Fredoka (default)' : f[0] === 'System' ? 'System (your phone\'s font)' : f[0]) + '</option>'; }).join('') + '</select><p class="m" data-fprev style="margin:6px 0 0">The quick brown fox jumps over 12 lazy dogs: RM 38.50</p><p class="m" style="margin-top:12px">Text size: <b data-szv>100%</b></p><div class="szr"><input type="range" min="15" max="140" step="5" value="100" data-szr aria-label="Text size percentage"><button class="s" data-szreset>Reset</button></div><div class="szs"><span>15%</span><span>100%</span><span>140%</span></div>' + grpHtml() + '<div class="bar" style="justify-content:flex-end"><button data-close>Done</button></div></div>';
+    ov.innerHTML = '<div class="mb stg" role="dialog" aria-modal="true" aria-label="Settings" style="max-height:88vh;overflow:auto"><h2>Settings</h2><p class="m">Appearance</p><div class="seg"><button data-t="light">Light</button><button data-t="dark">Dark</button></div><p class="m" style="margin-top:12px">Theme colour</p><div class="sw"><button class="swb" data-c="" aria-label="Default colours" title="Default" style="background:linear-gradient(135deg,#F3D1B5 50%,#9E3434 50%)"></button>' + [['#2B6CB0','Ocean'],['#2F7D4F','Forest'],['#7B4BB7','Grape'],['#D6457A','Rose'],['#D9822B','Sunset']].map(function (c) { return '<button class="swb" data-c="' + c[0] + '" aria-label="' + c[1] + '" title="' + c[1] + '" style="background:' + c[0] + '"></button>'; }).join('') + '<input type="color" data-accent aria-label="Pick any colour" value="#9e3434"></div><p class="m" style="margin-top:12px">Secondary colour <span class="m">(header gradient and highlights)</span></p><div class="sw"><button class="swb" data-c2="" aria-label="Default secondary colour" title="Default" style="background:linear-gradient(135deg,#F3D1B5 50%,#3E9C93 50%)"></button>' + [['#E8735A','Coral'],['#EDB445','Sun'],['#4C8FD6','Sky'],['#9B7BD0','Lilac'],['#E0508A','Pink']].map(function (c) { return '<button class="swb" data-c2="' + c[0] + '" aria-label="' + c[1] + '" title="' + c[1] + '" style="background:' + c[0] + '"></button>'; }).join('') + '<input type="color" data-accent2 aria-label="Pick any secondary colour" value="#3e9c93"></div><p class="m" style="margin-top:12px">Text colour <span class="m" data-fcl>(light mode)</span></p><div class="sw"><button class="swb" data-fc="" aria-label="Default text colour" title="Default" style="background:linear-gradient(135deg,#331E1D 50%,#E8E4EA 50%)"></button>' + [['#FFFFFF','White'],['#FFF1E0','Cream'],['#D9DEE6','Soft grey'],['#000000','Black'],['#331E1D','Dark brown'],['#0B2240','Navy']].map(function (c) { return '<button class="swb" data-fc="' + c[0] + '" aria-label="' + c[1] + '" title="' + c[1] + '" style="background:' + c[0] + '"></button>'; }).join('') + '<input type="color" data-fcolor aria-label="Pick any text colour" value="#331e1d"></div><p class="m" data-fcm style="min-height:1.2em;margin:2px 0 0"></p><p class="m" style="margin-top:12px">Font</p><select class="w" data-font aria-label="Font">' + window.__fonts.map(function (f) { return '<option value="' + f[0] + '">' + (f[0] === 'Fredoka' ? 'Fredoka (default)' : f[0] === 'System' ? 'System (your phone\'s font)' : f[0]) + '</option>'; }).join('') + '</select><p class="m" data-fprev style="margin:6px 0 0">The quick brown fox jumps over 12 lazy dogs: RM 38.50</p><p class="m" style="margin-top:12px">Text size: <b data-szv>100%</b></p><div class="szr"><input type="range" min="15" max="140" step="5" value="100" data-szr aria-label="Text size percentage"><button class="s" data-szreset>Reset</button></div><div class="szs"><span>15%</span><span>100%</span><span>140%</span></div>' + grpHtml() + '<div class="bar" style="justify-content:flex-end"><button data-close>Done</button></div></div>';
     function mark() { ov.querySelectorAll('[data-t]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-t') === cur()); }); }
     function close() { document.removeEventListener('keydown', kd, true); ov.remove(); }
     function kd(e) { if (e.key === 'Escape') close(); }
-    ov.querySelectorAll('[data-t]').forEach(function (b) { b.onclick = function () { apply(b.getAttribute('data-t')); mark(); }; });
+    ov.querySelectorAll('[data-t]').forEach(function (b) { b.onclick = function () { apply(b.getAttribute('data-t')); mark(); markF(); }; });
     var gs = ov.querySelector('[data-gcur]');
     if (gs) gs.onchange = function () {
       var m = ov.querySelector('[data-gmsg]'); m.textContent = 'Saving...';
@@ -220,7 +222,25 @@ input,select,textarea{font-size:max(16px,1rem)}
     function setB(v) { try { if (v) localStorage.setItem('accent2', v); else localStorage.removeItem('accent2'); } catch (e) {} if (window.__accent) window.__accent(); markB(); }
     ov.querySelectorAll('[data-c2]').forEach(function (b) { b.onclick = function () { setB(b.getAttribute('data-c2')); }; });
     ov.querySelector('[data-accent2]').oninput = function (e) { setB(e.target.value); };
-    markA(); markB();
+    function fcKey() { return 'fcolor_' + (cur() === 'dark' ? 'dark' : 'light'); }
+    function fcGet() { try { return (localStorage.getItem(fcKey()) || '').toLowerCase(); } catch (e) { return ''; } }
+    function lum(r, g, b) { return [r, g, b].map(function (v) { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); }).reduce(function (a, v, i) { return a + v * [.2126, .7152, .0722][i]; }, 0); }
+    function markF() {
+      var f = fcGet(), lab = ov.querySelector('[data-fcl]'), msg = ov.querySelector('[data-fcm]'), ci = ov.querySelector('[data-fcolor]');
+      lab.textContent = '(' + cur() + ' mode)';
+      ov.querySelectorAll('[data-fc]').forEach(function (b) { b.classList.toggle('on', (b.getAttribute('data-fc') || '').toLowerCase() === f); });
+      if (f) ci.value = f;
+      msg.textContent = '';
+      if (f) {
+        var t = document.createElement('div'); t.style.cssText = 'background:var(--paper);display:none'; document.body.appendChild(t);
+        var m = getComputedStyle(t).backgroundColor.match(/[\d.]+/g); t.remove();
+        if (m) { var n = parseInt(f.slice(1), 16), a = lum(n >> 16 & 255, n >> 8 & 255, n & 255), b = lum(+m[0], +m[1], +m[2]), r = (Math.max(a, b) + .05) / (Math.min(a, b) + .05); if (r < 3) msg.textContent = 'This colour may be hard to read on the current background.'; }
+      }
+    }
+    function setF(v) { try { if (v) localStorage.setItem(fcKey(), v); else localStorage.removeItem(fcKey()); } catch (e) {} if (window.__accent) window.__accent(); markF(); }
+    ov.querySelectorAll('[data-fc]').forEach(function (b) { b.onclick = function () { setF(b.getAttribute('data-fc')); }; });
+    ov.querySelector('[data-fcolor]').oninput = function (e) { setF(e.target.value); };
+    markA(); markB(); markF();
     var fs = ov.querySelector('[data-font]');
     try { fs.value = localStorage.getItem('font') || 'Fredoka'; } catch (e) {}
     if (!fs.value) fs.value = 'Fredoka';
