@@ -42,7 +42,7 @@ a{color:var(--acc);font-weight:600}
 .hd{margin:0 -12px 12px;padding:calc(env(safe-area-inset-top,0px) + 16px) 18px 22px;background:var(--hd);color:var(--onhd);border-radius:0 0 28px 28px;box-shadow:0 4px 14px var(--sh)}
 .hd h1{margin:.2em 0 0;color:inherit}.hd a{color:inherit;font-weight:600;text-decoration:none}.hd .m{color:inherit;opacity:.92;margin:.2em 0 0}
 .fab{position:fixed;right:max(16px,calc(50% - 264px));bottom:max(20px,env(safe-area-inset-bottom));border-radius:99px;padding:14px 20px;box-shadow:0 6px 18px rgba(51,30,29,.4);z-index:5}
-.seg{display:flex;margin:12px 0;border-radius:999px;overflow:hidden}.seg button{flex:1;background:var(--paper);color:var(--ink);border-radius:0;box-shadow:inset 0 0 0 1.5px var(--line)}.seg button.on{background:var(--acc);color:var(--onacc)}
+.seg{display:flex;gap:4px;margin:12px 0;padding:4px;border-radius:999px;background:var(--paper);box-shadow:inset 0 0 0 1.5px var(--line);max-width:100%}.seg button{flex:1 1 0;min-width:0;background:transparent;color:var(--ink);border-radius:999px;box-shadow:none;padding:8px 6px;font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.seg button.on{background:var(--acc);color:var(--onacc)}
 a.ex,.row.ex{color:var(--ink);text-decoration:none;font-weight:400}a.n.ex{display:flex;align-items:center;font-weight:600}
 .av{display:inline-grid;place-items:center;width:38px;height:38px;border-radius:14px;background:var(--accbg);color:var(--acc);font-weight:800;margin-right:10px;flex:none}
 .dt{width:34px;text-align:center;font-size:.75rem;color:var(--mute);line-height:1.15;flex:none}.dt b{font-size:1.05rem;color:var(--ink)}
@@ -85,6 +85,8 @@ button{transition:transform .15s cubic-bezier(.34,1.56,.64,1)}button:active{tran
 body{padding-bottom:150px}
 .tap{cursor:pointer}.tap:active{background:var(--accbg);border-radius:14px}.chev{font-size:1.6rem;line-height:1;color:var(--teal);font-weight:700;margin-left:2px}
 .hd2l{padding-top:calc(env(safe-area-inset-top,0px) + 14px);padding-bottom:16px}.hd2l h1{margin:0}.hd2l h1 a{font-size:1.5rem;margin-right:4px}.hd2l .m{margin:4px 0 0}.hd2l .sp{font-size:20px;font-weight:600}
+.card,.dd,.row{min-width:0}input[type=date]{-webkit-appearance:none;appearance:none;display:block;width:100%;max-width:100%;min-width:0;min-height:44px;text-align:left;line-height:1.2}input[type=date]::-webkit-date-and-time-value{text-align:left;min-height:1.2em}
+.row select{max-width:46%}
 </style>
 </head>
 <body>
@@ -537,7 +539,7 @@ async function viewExpense(id, tripId) {
       const body = d.how === 'even'
         ? ticks(M, d.even, 'ev')
         : M.map(m => `<div class="row"><span class="n">${esc(m)}</span><input type="number" inputmode="decimal" step="0.01" min="0" style="width:96px" data-f="${d.how}" data-n="${esc(m)}" aria-label="${esc(m)}" value="${d[d.how][m] ?? ''}"><span>${d.how === 'pct' ? '%' : d.cur}</span></div>`).join('') + '<p class="m" id="hint"></p>';
-      main = ui.menu ? `<div class="dd"><div class="ph"><div class="seg" style="flex:1;margin:0">${tab('even', 'Evenly')}${tab('pct', 'Percentages')}${tab('amt', 'Unequally')}</div><button data-a="menu">Done</button>${d.how === 'even' ? `<div class="ph2"><b>Select people</b><button class="s" data-a="all">${M.every(m => d.even.includes(m)) ? 'Unselect all' : 'Select all'}</button></div>` : ''}</div>${body}</div>` : '';
+      main = ui.menu ? `<div class="dd"><div class="ph"><div class="seg" style="flex:1 1 100%;margin:0">${tab('even', 'Evenly')}${tab('pct', 'Percentages')}${tab('amt', 'Unequally')}</div><div class="ph2"><b>${d.how === 'even' ? 'Select people' : 'Split'}</b><span>${d.how === 'even' ? `<button class="s" data-a="all">${M.every(m => d.even.includes(m)) ? 'Unselect all' : 'Select all'}</button> ` : ''}<button data-a="menu">Done</button></span></div></div>${body}</div>` : '';
     } else {
       main = `<div class="card"><h2>Fees on the whole bill</h2><div class="f feebox"><input type="number" inputmode="decimal" step="0.01" min="0" data-f="fee" placeholder="Service charge + taxes" title="Service charge + taxes" aria-label="Service charge plus taxes, percent" value="${esc(d.fee)}"><span class="pct" aria-hidden="true">%</span></div><p class="m" id="feeLine"></p><hr class="sep">
       <h2 style="margin-top:6px">Items</h2>${d.items.map((it, i) => `<div class="f"><input data-f="in" data-i="${i}" placeholder="Item" aria-label="Item name" value="${esc(it.n)}"><input type="number" inputmode="decimal" step="0.01" min="0" style="width:84px" data-f="ip" data-i="${i}" placeholder="Cost" aria-label="Cost" value="${esc(it.p)}"><button class="s" data-a="who" data-i="${i}" aria-label="Who bought this">${HEAD}${it.c.length ? ' ' + it.c.length : ''}</button><button class="x" data-a="rmv" data-i="${i}" aria-label="Remove row">✕</button></div>
