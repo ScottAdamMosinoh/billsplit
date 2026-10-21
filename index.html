@@ -107,7 +107,7 @@ body{padding-bottom:150px}
     var g = window.__grp && /^#\/t\//.test(location.hash) ? window.__grp : null;
     function grpHtml() {
       if (!g) return '';
-      return '<h2 style="margin-top:16px">Group settings</h2><p class="m">Default currency for new expenses in this group</p><select class="w" data-gcur aria-label="Default currency">' + g.curs.map(function (c) { return '<option' + (c === g.cur ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select><p class="m" data-gmsg style="min-height:1.2em;margin:2px 0 6px"></p>';
+      return '<h2 style="margin-top:16px">Group settings</h2><p class="m">Default currency for new expenses in this group</p><select class="w" data-gcur aria-label="Default currency">' + g.curs.map(function (c) { return '<option' + (c === g.cur ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select><p class="m" style="margin-top:10px">Header picture</p><div class="bar" style="margin-top:4px"><button data-cpick>Choose photo</button><button class="s" data-crem' + (g.cover ? '' : ' hidden') + '>Remove</button></div><input type="file" accept="image/*" data-cfile hidden><p class="m" data-gmsg style="min-height:1.2em;margin:6px 0 6px"></p>';
     }
     var ov = document.createElement('div'); ov.className = 'ov';
     ov.innerHTML = '<div class="mb" role="dialog" aria-modal="true" aria-label="Settings"><h2>Settings</h2><p class="m">Appearance</p><div class="seg"><button data-t="light">Light</button><button data-t="dark">Dark</button></div>' + grpHtml() + '<div class="bar" style="justify-content:flex-end"><button data-close>Done</button></div></div>';
@@ -120,6 +120,37 @@ body{padding-bottom:150px}
       var m = ov.querySelector('[data-gmsg]'); m.textContent = 'Saving...';
       Promise.resolve(g.set(gs.value)).then(function () { g.cur = gs.value; m.textContent = 'Saved. New expenses will start in ' + gs.value + '.'; }, function () { m.textContent = 'Could not save. Check your connection.'; gs.value = g.cur; });
     };
+    function shrink(file) {
+      return new Promise(function (res, rej) {
+        var url = URL.createObjectURL(file), im = new Image();
+        im.onload = function () {
+          var out = null;
+          [[900, .72], [720, .6], [560, .5]].some(function (t) {
+            var k = Math.min(1, t[0] / Math.max(im.width, im.height)), cv = document.createElement('canvas');
+            cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k);
+            cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+            out = cv.toDataURL('image/jpeg', t[1]); return out.length < 380000;
+          });
+          URL.revokeObjectURL(url); out.length < 700000 ? res(out) : rej(new Error('big'));
+        };
+        im.onerror = function () { URL.revokeObjectURL(url); rej(new Error('bad')); };
+        im.src = url;
+      });
+    }
+    var cf = ov.querySelector('[data-cfile]'), cp = ov.querySelector('[data-cpick]'), cr = ov.querySelector('[data-crem]');
+    if (cf) {
+      var gm = ov.querySelector('[data-gmsg]');
+      cp.onclick = function () { cf.click(); };
+      cf.onchange = function () {
+        var f = cf.files && cf.files[0]; if (!f) return; gm.textContent = 'Saving picture...';
+        shrink(f).then(function (d) { return g.setCover(d); }).then(function () { g.cover = true; cr.hidden = false; gm.textContent = 'Saved. Everyone in the group will see it.'; }, function () { gm.textContent = 'Could not use that photo. Try a different one.'; });
+        cf.value = '';
+      };
+      cr.onclick = function () {
+        gm.textContent = 'Removing...';
+        Promise.resolve(g.setCover(null)).then(function () { g.cover = false; cr.hidden = true; gm.textContent = 'Picture removed.'; }, function () { gm.textContent = 'Could not remove. Check your connection.'; });
+      };
+    }
     ov.querySelector('[data-close]').onclick = close;
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
     document.addEventListener('keydown', kd, true);
@@ -347,6 +378,8 @@ function viewTrip(id) {
     const emo = EMO[[...trip.name].reduce((a, ch) => a + ch.charCodeAt(0), 0) % EMO.length];
     const spent = {}; bills.forEach(b => { const k = b.currency || 'MYR'; try { spent[k] = (spent[k] || 0) + calc(b).total; } catch (e) {} });
     const spentTxt = Object.entries(spent).map(([k, v]) => fmt(v, k)).join(' + ');
+    const coverOk = typeof trip.cover === 'string' && /^data:image\/jpeg;base64,[A-Za-z0-9+\/=]+$/.test(trip.cover);
+    const coverCss = coverOk ? ` style="background:linear-gradient(rgba(30,15,14,.45),rgba(30,15,14,.62)),url('${trip.cover}') center/cover no-repeat"` : '';
     const chips = () => trip.members.map(m => `<button class="chip ${m === me ? 'on' : ''}" data-a="me" data-n="${esc(m)}">${esc(m)}</button>`).join('');
     const meCard = !me && trip.members.length ? `<div class="card"><h2>Who are you?</h2><div class="chips">${chips()}</div></div>` : '';
     let body = '';
@@ -404,11 +437,11 @@ function viewTrip(id) {
       ${fxUI}<div class="card"><h2>Group total</h2><div class="big">${spent}</div><p class="m">across ${bills.length} expense${bills.length === 1 ? '' : 's'}</p><div class="bar"><button class="s" data-a="cl">Copy group link</button></div></div>`;
     }
     const seg = (v, t, i) => `<button class="${tab === v ? 'on' : ''}" data-a="tab" data-v="${v}"><span class="ni">${i}</span>${t}</button>`;
-    app.innerHTML = `<div class="hd hd2l"><h1><a href="#/" aria-label="Back to groups">‹</a> ${esc(trip.name)} ${emo}</h1><p class="m">${line}</p></div>${tab === 'x' ? meCard : ''}
+    app.innerHTML = `<div class="hd hd2l"${coverCss}><h1><a href="#/" aria-label="Back to groups">‹</a> ${esc(trip.name)} ${emo}</h1><p class="m">${line}</p></div>${tab === 'x' ? meCard : ''}
     ${body}<div class="nav">${seg('x', 'Expenses', '🧾')}${seg('b', 'Balances', '⚖️')}${seg('m', 'Members', '👥')}</div>
     <button class="fab" data-a="nb">+ Add expense</button>`;
   };
-  sub(ref, d => { trip = d.exists ? d.data() : false; window.__grp = trip ? { cur: trip.defaultCur || 'MYR', curs: CURS, set: v => ref.update({ defaultCur: v }) } : null; if (trip) addHist('t', id, trip.name); draw(); });
+  sub(ref, d => { trip = d.exists ? d.data() : false; window.__grp = trip ? { cur: trip.defaultCur || 'MYR', curs: CURS, set: v => ref.update({ defaultCur: v }), cover: !!trip.cover, setCover: v => ref.update({ cover: v || FV.delete() }) } : null; if (trip) addHist('t', id, trip.name); draw(); });
   sub(db.collection('bills').where('tripId', '==', id), q => { bills = q.docs.map(d => ({ ...d.data(), _id: d.id })); draw(); });
   on({
     tab: el => { tab = el.dataset.v; draw(); },
