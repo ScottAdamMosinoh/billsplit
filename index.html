@@ -330,7 +330,7 @@ function viewTrip(id) {
     if (!curs.length) curs.push('MYR');
     const bals = curs.map(c => [c, balances(bills, sets, c)]);
     const line = !me ? 'Pick your name to see your balance' : (() => {
-      const a = bals.map(([c, bal]) => { const v = bal[me] || 0; return v > 0.005 ? 'You are owed ' + fmt(v, c) : v < -0.005 ? 'You owe ' + fmt(-v, c) : ''; }).filter(Boolean);
+      const a = bals.map(([c, bal]) => { const v = bal[me] || 0; return v > 0.005 ? 'You are owed <b class="sp">' + fmt(v, c) + '</b>' : v < -0.005 ? 'You owe <b class="sp">' + fmt(-v, c) + '</b>' : ''; }).filter(Boolean);
       return a.length ? a.join('. ') : 'You are all settled up';
     })();
     const EMO = ['🌴','🍜','🎒','🚗','🏖️','🎉','🍕','⛰️','🛍️','🎬'];
@@ -394,7 +394,7 @@ function viewTrip(id) {
       ${fxUI}<div class="card"><h2>Group total</h2><div class="big">${spent}</div><p class="m">across ${bills.length} expense${bills.length === 1 ? '' : 's'}</p><div class="bar"><button class="s" data-a="cl">Copy group link</button></div></div>`;
     }
     const seg = (v, t, i) => `<button class="${tab === v ? 'on' : ''}" data-a="tab" data-v="${v}"><span class="ni">${i}</span>${t}</button>`;
-    app.innerHTML = `<div class="hd hd2l"><h1><a href="#/" aria-label="Back to groups">‹</a> ${esc(trip.name)}</h1><p class="m">${spentTxt ? `<b class="sp">${spentTxt}</b> spent · ` : ''}${line}</p></div>${tab === 'x' ? meCard : ''}
+    app.innerHTML = `<div class="hd hd2l"><h1><a href="#/" aria-label="Back to groups">‹</a> ${esc(trip.name)} ${emo}</h1><p class="m">${line}</p></div>${tab === 'x' ? meCard : ''}
     ${body}<div class="nav">${seg('x', 'Expenses', '🧾')}${seg('b', 'Balances', '⚖️')}${seg('m', 'Members', '👥')}</div>
     <button class="fab" data-a="nb">+ Add expense</button>`;
   };
