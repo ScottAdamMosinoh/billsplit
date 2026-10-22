@@ -402,7 +402,19 @@ const catName = k => { const c = CATS.find(x => x[0] === k); return c ? c[1] + '
 const catOpts = v => '<option value="">No category</option>' + CATS.map(c => `<option value="${c[0]}" ${v === c[0] ? 'selected' : ''}>${c[1]} ${c[2]}</option>`).join('');
 const CAT_COL = ['var(--coral)', 'var(--sun)', 'var(--teal)', 'var(--acc)', '#9B7BD0', '#6FA8DC', '#B5A642', '#C77DA5', '#E0508A', '#8D7052'];
 const LANGS = [['en', 'English (no translation)', 'eng'], ['zh-CN', 'Chinese (Simplified)', 'chi_sim+eng'], ['zh-TW', 'Chinese (Traditional)', 'chi_tra+eng'], ['ja', 'Japanese', 'jpn+eng'], ['ko', 'Korean', 'kor+eng'], ['th', 'Thai', 'tha+eng'], ['ms', 'Malay', 'eng'], ['id', 'Indonesian', 'eng'], ['vi', 'Vietnamese', 'vie+eng'], ['es', 'Spanish', 'spa+eng'], ['fr', 'French', 'fra+eng'], ['de', 'German', 'deu+eng'], ['it', 'Italian', 'ita+eng'], ['pt', 'Portuguese', 'por+eng']];
-const SKIPX = /合計|合计|总计|總計|小計|小计|消費税|消费税|税等|内税|税|稅|サービス|お釣|釣り|お預|伝票|テーブル|点数|対象|找零|找錢|现金|現金|現計|会計|領収|レシート|日付|電話|电话|합계|소계|부가세|현금|거스름|카드|영수증|ยอดรวม|ภาษี|เงินทอน|เงินสด|ส่วนลด|impuesto|propina|cambio|efectivo|tarjeta|montant|espèces|rendu|summe|mwst|rückgeld|karte|imposta|contanti|totale|troco|dinheiro|cartão|jumlah|baki|tunai|cukai|kembali|tổng|thuế|tiền mặt/i;
+// ===== receipt reading: items, fees, totals =====
+const K_OTHER = /点数|點數|total\s*(items?|qty|quantity)|item\s*count|お釣|お預|現計|現金|现金|\bcash\b|tender|\bchange\b|rounding|端数|丸め|discount|割引|折扣|할인|\bcard\b|visa|master\s?card|amex|\bpaid\b|payment|balance|\bdue\b|deposit|voucher|coupon|\bpoints?\b|お会計/i;
+const K_SUB = /sub\s*-?\s*total|小\s*計|小\s*计|소계|jumlah\s*kecil|sous-?total|zwischensumme|subtotale|ยอดรวมย่อย/i;
+const K_SVC = /service|\bsvc\b|serv\.?\s*ch|服务费|服務費|サービス|봉사료|서비스|ค่าบริการ|\bservis\b|servicio|propina|gratuity|bedienung|servizio|servi[cç]o/i;
+const K_TAX = /\btax\b|\bgst\b|\bsst\b|\bvat\b|cukai|消費税|消费税|税|稅|부가세|부가가치세|ภาษี|\biva\b|impuesto|mwst|\bust\b|\btva\b|imposta|imposto|thuế|pajak|\bppn\b/i;
+const K_INC = /内税|税込|含税|含稅|tax\s*incl|incl\.?\s*(tax|gst|sst)|inclusive|included|포함/i;
+const K_TOT = /grand\s*total|total|合\s*計|合\s*计|总\s*计|總\s*計|합계|총\s*액|ยอดรวม|รวมทั้งสิ้น|\bjumlah\b|totale|summe|gesamt|montant|importe/i;
+const K_HEAD = /\btable\b|\btbl\b|\border\b|receipt|invoice|bill\s*no|check\s*no|\bchk\b|\bserver\b|cashier|waiter|\bstaff\b|\bguests?\b|\bpax\b|\bcovers\b|\btel\b|\bphone\b|\bfax\b|www\.|https?:|@\w|thank|welcome|reg\.?\s*no|tax\s*id|gst\s*id|terminal|\bref\b|approval|\bauth\b|伝票|テーブル|担当|レジ|電話|电话|領収|レシート|日付|桌号|桌號|单号|單號|发票|收据|테이블|영수증|ใบเสร็จ|โต๊ะ|\bnota\b|\bmeja\b|\bmesa\b|\bticket\b|rechnung|\btisch\b|fattura|\btavolo\b/i;
+const K_ADDR = /\b(jalan|jln|street|road|avenue|blvd|level|floor|unit|blk|block|lot)\b|\bst\.|\brd\.|\bno\.\s*\d|東京都|大阪府|京都府|北海道|[都道府県市区町村]{1}.{0,12}[0-9０-９]+[-ー－]|丁目|番地|ビル|\d+\s*[Ff]\b|[路街巷弄]\s*\d|\d+\s*[号號]/i;
+const K_DATE = /\b\d{1,4}[\/.-]\d{1,2}[\/.-]\d{1,4}\b|\d{4}\s*年|\d+\s*月\s*\d+\s*日|\b\d{1,2}:\d{2}(:\d{2})?\b|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b|\b\d{2,4}[-\s)]\s?\d{3,4}[-\s]\d{3,4}\b|\d{7,}/i;
+const numOf = x => { let v = x.replace(/\s/g, ''); if (/[.,]\d{2}$/.test(v)) v = v.slice(0, -3).replace(/[.,]/g, '') + '.' + v.slice(-2); else v = v.replace(/[.,]/g, ''); const n = parseFloat(v); return isFinite(n) ? n : null; };
+const lastNum = t => { const u = t.replace(/\d+(?:[.,]\d+)?\s*%/g, ' ').replace(/[^\d]+$/u, ''); const m = u.match(/(\d[\d,. ]*)$/); return m ? numOf(m[1].trim()) : null; };
+const pctOf = t => { const m = t.match(/(\d+(?:[.,]\d+)?)\s*%/); return m ? parseFloat(m[1].replace(',', '.')) : null; };
 const CJKR = '\\u3000-\\u30ff\\u3400-\\u9fff\\uac00-\\ud7af\\u0e00-\\u0e7f\\uff00-\\uffef';
 const MARK = /^\s*[外内軽※*＊]/;
 // last yen-style amount on a line: copes with "¥1, 360", a tax mark like 外 read as junk, or glued onto the digits
@@ -419,14 +431,44 @@ function lastYen(t) {
   }
   return { name: t.slice(0, m.index), price };
 }
+// item name only: no quantity, unit price, currency, or stray one-character OCR noise
+function cleanName(raw) {
+  let n = raw.normalize('NFKC'), m;
+  n = n.replace(/[|\\_~=<>{}\[\]^`"“”‘’*★•・]+/g, ' ').replace(/\b(?:RM|MYR|USD|SGD|JPY)\b/gi, ' ')
+    .replace(/[@＠]\s*[¥$€£฿₩]?\s*\d+(?:[.,]\d+)?/g, ' ').replace(/[¥$€£฿₩]\s*\d[\d,.]*/g, ' ').replace(/\d+[.,]\d{2}\b/g, ' ')
+    .replace(/\bqty\.?\s*:?\s*\d+/ig, ' ');
+  let qty = 1;
+  if ((m = n.match(/^\s*(\d{1,2})\s*[xX×]\s*(?=\S)/))) { qty = +m[1]; n = n.slice(m[0].length); }
+  else if ((m = n.match(/^\s*([1-9])\s+(?=\p{L})(?!(?:up|plus)\b)/iu))) { qty = +m[1]; n = n.slice(m[0].length); }
+  if ((m = n.match(/\s*[xX×]\s*(\d{1,3})\s*$/)) || (m = n.match(/\s+(\d{1,3})\s*[xX×]\s*$/))) { qty = +m[1]; n = n.slice(0, m.index); }
+  else if ((m = n.match(/\s*[(（]\s*(\d{1,2})\s*[)）]\s*$/))) { qty = +m[1]; n = n.slice(0, m.index); }
+  let tk = n.split(/\s+/).filter(Boolean);
+  const symOnly = w => /^[^\p{L}\p{N}]+$/u.test(w), digits = w => /^\p{N}+$/u.test(w), one = (w, i) => /^[A-Za-z]$/.test(w) && !/^(set|combo|menu|type|option|size|no)$/i.test(tk[i - 1] || '');
+  tk = tk.filter(w => !symOnly(w));
+  while (tk.length > 1 && ((digits(tk[0]) && !/^(up|plus)$/i.test(tk[1] || '')) || one(tk[0], 0))) tk.shift();
+  while (tk.length > 1 && (digits(tk[tk.length - 1]) || one(tk[tk.length - 1], tk.length - 1))) tk.pop();
+  return { name: tk.join(' ').replace(/^[\s.:,;-]+|[\s.:,;-]+$/g, ''), qty };
+}
 function parseReceipt(text, lang = 'en') {
-  const out = [], intOK = ['ja', 'ko', 'vi', 'id'].includes(lang); let pending = '', run = 0, stop = false;
+  const items = [], intOK = ['ja', 'ko', 'vi', 'id'].includes(lang), asia = ['ja', 'zh-CN', 'zh-TW'].includes(lang);
+  let pending = '', run = 0, done = false, sub = null, tot = null, svc = null, tax = null, pSvc = null, pTax = null;
   const cjkGap = new RegExp('(?<=[' + CJKR + '])\\s+(?=[' + CJKR + '])', 'g');
+  const okName = n => { const cjk = /[\u3000-\u9fff\uac00-\ud7af\u0e00-\u0e7f]/.test(n); return [...n].length >= (cjk ? 1 : 2) && /\p{L}/u.test(n); };
   text.split('\n').forEach(line => {
-    if (stop) return;
-    let t = line.normalize('NFKC').replace(cjkGap, '').replace(/\s+/g, ' ').trim();
+    const t = line.normalize('NFKC').replace(cjkGap, '').replace(/\s+/g, ' ').trim(); if (!t) return;
+    const num = lastNum(t), pc = pctOf(t), inc = K_INC.test(t);
+    // totals, fees and taxes are kept apart from the items
+    if (K_OTHER.test(t)) { pending = ''; return; }
+    if (K_SUB.test(t)) { if (num != null) sub = num; done = true; pending = ''; return; }
+    if (K_SVC.test(t)) { if (!inc) { if (num != null) svc = (svc || 0) + num; if (pc != null) pSvc = pc; } pending = ''; return; }
+    if (K_TAX.test(t)) { if (!inc) { if (num != null) tax = (tax || 0) + num; if (pc != null) pTax = pc; } pending = ''; return; }
+    if (inc) { pending = ''; return; }
+    if (K_TOT.test(t)) { if (num != null) tot = Math.max(tot || 0, num); done = true; pending = ''; return; }
+    // header lines: store, address, phone, date/time, table, order numbers
+    if (K_HEAD.test(t) || K_DATE.test(t) || K_ADDR.test(t)) { pending = ''; return; }
+    if (done) return;
     let name, price, hit = null;
-    if (lang === 'ja' || lang === 'zh-CN' || lang === 'zh-TW') hit = lastYen(t);
+    if (asia) hit = lastYen(t);
     if (hit) { name = hit.name; price = hit.price; }
     else {
       const m = t.match(/^(.*?)\s*(?:RM|\$|[¥€£฿₩])?\s*(\d{1,5}[.,]\d{2})\s*[A-Za-z]{0,2}$/);
@@ -436,36 +478,82 @@ function parseReceipt(text, lang = 'en') {
         if (k) { name = k[1]; price = k[2].replace(/[,.\s]/g, ''); }
       }
     }
-    const clean = x => x.replace(/[|_~=*]+/g, ' ').replace(/^[\s*★•・.:-]+/, '').replace(/\s*(RM|\$|[¥€£฿₩])$/i, '').replace(/[\s.:\-—–]+$/, '').trim();
-    const okName = n => { const cjk = /[\u3000-\u9fff\uac00-\ud7af\u0e00-\u0e7f]/.test(n);
-      return [...n].length >= (cjk ? 1 : 2) && /\p{L}/u.test(n) && !SKIP.test(n) && !(lang !== 'en' && SKIPX.test(n)) && !/\d{4}\s*年|\d+\s*月\s*\d+\s*日|\d{1,2}:\d{2}|^no\.?\s*\d/i.test(n); };
-    if (name === undefined) { const c = clean(t.replace(/[¥Y]\s*\d.*$/, '')); pending = okName(c) ? c : ''; return; }
+    if (name === undefined) { const c = cleanName(t.replace(/[¥Y]\s*\d.*$/, '')).name; pending = okName(c) ? c : ''; return; }
     const raw = name.trim();
-    if (/[\d]-\s*$/.test(raw) || /-\s*$/.test(raw) && /\d/.test(raw)) { pending = ''; return; }   // phone numbers and addresses
-    let nm = clean(raw);
-    if (/^\W{0,2}\s*[¥]?\s*\d[\d,.]*\s*[xX×*]\s*\d+$/.test(raw.replace(/\s+/g, ' ')) || !nm) nm = pending;   // "@680 x 2 ¥1,360" belongs to the line above
+    if (/-\s*$/.test(raw) && /\d/.test(raw)) { pending = ''; return; }          // phone numbers, addresses
+    let nm;
+    if (/^\W{0,2}\s*[¥]?\s*\d[\d,.]*\s*[xX×*]\s*\d+$/.test(raw.replace(/\s+/g, ' ')) || !raw) nm = pending;   // "@680 x 2 ¥1,360": the name is on the line above
+    else nm = cleanName(raw).name;
     pending = '';
     if (!nm || !okName(nm)) return;
     // a line whose amount equals everything listed so far is the subtotal: the items are over
-    if (out.length >= 2 && Math.round(parseFloat(price) * 100) === Math.round(run * 100)) { stop = true; return; }
+    if (items.length >= 2 && Math.round(parseFloat(price) * 100) === Math.round(run * 100)) { sub = parseFloat(price); done = true; return; }
     run += parseFloat(price) || 0;
-    out.push({ n: nm, p: price });
+    items.push({ n: nm, p: price });
   });
+  const sumI = items.reduce((a, r) => a + (parseFloat(r.p) || 0), 0), base = sub != null ? sub : sumI;
+  let fee = null;
+  if ((svc || tax) && base > 0) fee = ((svc || 0) + (tax || 0)) / base * 100;
+  else if (!svc && !tax && tot != null && base > 0 && tot > base * 1.005) fee = (tot - base) / base * 100;
+  else if ((pSvc != null || pTax != null) && !svc && !tax) fee = (pSvc || 0) + (pTax || 0);
+  if (fee != null) { fee = Math.round(fee * 100) / 100; if (!(fee > 0) || fee > 40) fee = null; }
+  return { items, sub, tot, svc, tax, fee, sumI, mismatch: sub != null && items.length > 0 && Math.abs(sumI - sub) > Math.max(0.5, sub * 0.005) };
+}
+
+// ===== natural food names =====
+const FOOD = {
+  ja: "ベスト2=Best 2|プレミアムモルツ=Premium Malt's Beer|生ビール=Draft Beer|ビール=Beer|ハイボール=Highball|ウーロン茶=Oolong Tea|烏龍茶=Oolong Tea|緑茶=Green Tea|お茶=Tea|コーラ=Cola|ジンジャーエール=Ginger Ale|オレンジジュース=Orange Juice|ミネラルウォーター=Mineral Water|水=Water|赤ワイン=Red Wine|白ワイン=White Wine|ワイン=Wine|日本酒=Sake|焼酎=Shochu|梅酒=Plum Wine|白飯=Steamed Rice|ご飯=Rice|ライス=Rice|醤油ラーメン=Shoyu Ramen|味噌ラーメン=Miso Ramen|ラーメン=Ramen|うどん=Udon|そば=Soba|餃子=Gyoza|唐揚げ=Fried Chicken|から揚げ=Fried Chicken|焼き鳥=Yakitori|焼鳥=Yakitori|上カルビ=Premium Kalbi|カルビ=Kalbi|上ロース=Premium Loin|ロース=Loin|タン塩=Salted Beef Tongue|牛タン=Beef Tongue|ハラミ=Skirt Steak|ホルモン=Offal|焼肉=Yakiniku|刺身=Sashimi|寿司=Sushi|天ぷら=Tempura|枝豆=Edamame|冷奴=Chilled Tofu|豆腐=Tofu|さっぱり塩サラダ=Light Salt Salad|サラダ=Salad|カレー=Curry|ステーキ=Steak|ハンバーグ=Hamburg Steak|フライドポテト=French Fries|ポテト=Fries|チャーハン=Fried Rice|焼きそば=Yakisoba|お好み焼き=Okonomiyaki|たこ焼き=Takoyaki|味噌汁=Miso Soup|漬物=Pickles|キムチ=Kimchi|冷麺=Cold Noodles|ビビンバ=Bibimbap|アイスクリーム=Ice Cream|アイス=Ice Cream|デザート=Dessert|コーヒー=Coffee|紅茶=Black Tea|牛乳=Milk|カバーチャージ=Cover Charge|お通し=Appetizer|席料=Seating Charge",
+  zh: "海南鸡饭=Hainanese Chicken Rice|海南雞飯=Hainanese Chicken Rice|鸡饭=Chicken Rice|雞飯=Chicken Rice|蛋炒饭=Egg Fried Rice|蛋炒飯=Egg Fried Rice|炒饭=Fried Rice|炒飯=Fried Rice|白饭=Steamed Rice|白飯=Steamed Rice|米饭=Steamed Rice|米飯=Steamed Rice|牛肉面=Beef Noodles|牛肉麵=Beef Noodles|炒面=Fried Noodles|炒麵=Fried Noodles|馄饨=Wontons|餛飩=Wontons|饺子=Dumplings|餃子=Dumplings|小笼包=Xiaolongbao|小籠包=Xiaolongbao|包子=Steamed Buns|春卷=Spring Rolls|烧鸭=Roast Duck|燒鴨=Roast Duck|烤鸭=Peking Duck|烤鴨=Peking Duck|叉烧=Char Siu|叉燒=Char Siu|红烧肉=Braised Pork Belly|紅燒肉=Braised Pork Belly|宫保鸡丁=Kung Pao Chicken|宮保雞丁=Kung Pao Chicken|麻婆豆腐=Mapo Tofu|酸辣汤=Hot and Sour Soup|酸辣湯=Hot and Sour Soup|火锅=Hot Pot|火鍋=Hot Pot|珍珠奶茶=Bubble Milk Tea|奶茶=Milk Tea|红茶=Black Tea|紅茶=Black Tea|绿茶=Green Tea|綠茶=Green Tea|咖啡=Coffee|啤酒=Beer|可乐=Cola|可樂=Cola|雪碧=Sprite|矿泉水=Mineral Water|礦泉水=Mineral Water|果汁=Juice|豆浆=Soy Milk|豆漿=Soy Milk|牛肉=Beef|猪肉=Pork|豬肉=Pork|鸡肉=Chicken|雞肉=Chicken|蔬菜=Vegetables|青菜=Greens|空心菜=Water Spinach|小菜=Side Dish|茶位费=Tea Charge|茶位費=Tea Charge|餐位费=Cover Charge|餐位費=Cover Charge|汤=Soup|湯=Soup|茶=Tea",
+  ko: "비빔냉면=Spicy Cold Noodles|냉면=Cold Noodles|비빔밥=Bibimbap|순두부찌개=Soft Tofu Stew|김치찌개=Kimchi Stew|된장찌개=Soybean Paste Stew|불고기=Bulgogi|갈비=Galbi|삼겹살=Grilled Pork Belly|김밥=Gimbap|떡볶이=Tteokbokki|라면=Ramen|공기밥=Steamed Rice|소주=Soju|맥주=Beer|콜라=Cola|사이다=Lemon-Lime Soda|김치=Kimchi|파전=Scallion Pancake|치킨=Fried Chicken|잡채=Japchae|만두=Dumplings|삼계탕=Ginseng Chicken Soup|물=Water",
+  th: "ข้าวมันไก่=Chicken Rice|ข้าวผัด=Fried Rice|ผัดไทย=Pad Thai|ต้มยำกุ้ง=Tom Yum Goong|ต้มยำ=Tom Yum|ส้มตำ=Papaya Salad|แกงเขียวหวาน=Green Curry|ข้าวสวย=Steamed Rice|น้ำเปล่า=Water|เบียร์=Beer|ไก่ทอด=Fried Chicken",
+  ms: "teh tarik=Pulled Milk Tea|teh=Tea|kopi=Coffee|air kosong=Plain Water|ayam goreng=Fried Chicken|ikan bakar=Grilled Fish|mee goreng=Fried Noodles|mi goreng=Fried Noodles|nasi putih=Steamed Rice|nasi goreng=Fried Rice|sate=Satay|sup=Soup|es teh=Iced Tea|es jeruk=Iced Orange|jus=Juice|bakso=Meatballs|soto=Soto Soup|udang=Prawns|sotong=Squid|cumi=Squid|telur=Egg|sirap bandung=Rose Syrup Milk|ais=Ice",
+  es: "pollo asado=Roast Chicken|patatas bravas=Spicy Potatoes|vino tinto=Red Wine|vino blanco=White Wine|cerveza=Beer|agua=Water|ensalada=Salad|tortilla=Spanish Omelette|café=Coffee|pan=Bread|postre=Dessert|sopa=Soup|arroz=Rice|gambas=Prawns|jamón=Ham|refresco=Soft Drink|helado=Ice Cream|cubierto=Cover Charge",
+  fr: "steak frites=Steak and Fries|poulet rôti=Roast Chicken|plat du jour=Dish of the Day|vin rouge=Red Wine|vin blanc=White Wine|bière=Beer|eau=Water|salade=Salad|café=Coffee|pain=Bread|soupe=Soup|frites=Fries|crêpe=Crepe|fromage=Cheese|glace=Ice Cream|couvert=Cover Charge",
+  de: "bier=Beer|wasser=Water|salat=Salad|wein=Wine|kaffee=Coffee|brot=Bread|suppe=Soup|pommes=Fries|kuchen=Cake|eis=Ice Cream|hähnchen=Chicken|rindfleisch=Beef|schnitzel=Schnitzel",
+  it: "vino rosso=Red Wine|vino bianco=White Wine|birra=Beer|acqua=Water|insalata=Salad|caffè=Coffee|pane=Bread|coperto=Cover Charge|zuppa=Soup|gelato=Ice Cream|tiramisù=Tiramisu",
+  pt: "vinho tinto=Red Wine|cerveja=Beer|água=Water|salada=Salad|café=Coffee|pão=Bread|sobremesa=Dessert|sopa=Soup|arroz=Rice|frango=Chicken|couvert=Cover Charge",
+  vi: "bún chả=Grilled Pork with Noodles|cơm tấm=Broken Rice|gỏi cuốn=Fresh Spring Rolls|chả giò=Fried Spring Rolls|bánh mì=Banh Mi|cà phê=Coffee|trà đá=Iced Tea|phở=Pho|cơm=Rice|bia=Beer|nước=Water|nem=Spring Rolls"
+};
+const FOODSRC = { 'zh-CN': 'zh', 'zh-TW': 'zh', id: 'ms' };
+const FOREIGN = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Thai}]/u;
+const LATIN_LANG = ['ms', 'id', 'vi', 'es', 'fr', 'de', 'it', 'pt'];
+const decodeEnt = x => { const e = document.createElement('textarea'); e.innerHTML = x; return e.value; };
+function tidyEn(x) {
+  const w = decodeEnt(x).replace(/["“”]/g, '').replace(/\s+/g, ' ').replace(/^[\s.:,;-]+|[\s.:,;-]+$/g, '').replace(/^the\s+/i, '');
+  const small = /^(and|of|with|in|on|the|a|an|or|to|for)$/i, seen = [];
+  const t = w.split(' ').filter(z => { const k = z.toLowerCase(); if (seen.includes(k)) return false; seen.push(k); return true; });
+  return t.map((z, i) => i && small.test(z) ? z.toLowerCase() : z.toLowerCase().replace(/^([^\p{L}\p{N}]*)(.)/u, (m, a, c) => a + c.toUpperCase())).join(' ').slice(0, 60);
+}
+async function mtEn(txt, src) {
+  const r = await fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(txt) + '&langpair=' + src + '|en');
+  if (!r.ok) throw new Error('http');
+  const j = await r.json(), out = j && j.responseData && j.responseData.translatedText;
+  if (!out || String(j.responseStatus) !== '200' || /MYMEMORY WARNING|INVALID|PLEASE SELECT/i.test(out)) throw new Error('translate');
   return out;
 }
-const decodeEnt = x => { const e = document.createElement('textarea'); e.innerHTML = x; return e.value; };
+// dictionary first (so dishes read naturally), machine translation only for what is left over
+async function naturalName(name, src) {
+  const dict = (FOOD[FOODSRC[src] || src] || '').split('|').filter(Boolean).map(e => e.split('=')).sort((a, b) => b[0].length - a[0].length);
+  const latin = LATIN_LANG.includes(src), reps = []; let s = name.normalize('NFKC'); if (latin) s = s.toLowerCase();
+  dict.forEach(([k, v]) => {
+    const re = latin ? new RegExp('(?<![\\p{L}\\p{N}])' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\p{L}\\p{N}])', 'giu') : new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+    s = s.replace(re, () => { reps.push(v); return ' \uE000' + (reps.length - 1) + '\uE001 '; });
+  });
+  s = s.replace(/(\uE001)\s*小\s*$/, '$1 (Small)').replace(/(\uE001)\s*(大盛り?|特盛|大)\s*$/, '$1 (Large)').replace(/\s+/g, ' ').trim();
+  const parts = s.split(/(\uE000\d+\uE001)/).map(x => x.trim()).filter(Boolean);
+  let ok = true;
+  const out = await Promise.all(parts.map(async x => {
+    const m = x.match(/^\uE000(\d+)\uE001$/); if (m) return reps[+m[1]];
+    if (!(latin ? /\p{L}/u.test(x) : FOREIGN.test(x))) return x;
+    try { return await mtEn(x, src); } catch (e) { ok = false; return x; }
+  }));
+  return { name: tidyEn(out.join(' ')) || name, ok };
+}
 async function translateRows(rows, src) {
   if (src === 'en' || !rows.length) return { rows, ok: true };
   let ok = true, i = 0; const res = [...rows];
-  const tr = async txt => {
-    const r = await fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(txt) + '&langpair=' + src + '|en');
-    if (!r.ok) throw new Error('http');
-    const j = await r.json(), out = j && j.responseData && j.responseData.translatedText;
-    if (!out || String(j.responseStatus) !== '200' || /MYMEMORY WARNING|INVALID|PLEASE SELECT/i.test(out)) throw new Error('translate');
-    return decodeEnt(out).replace(/\s+/g, ' ').trim().slice(0, 60);
-  };
   await Promise.all(Array.from({ length: 4 }, async () => {
-    while (i < res.length) { const k = i++; try { const n = await tr(res[k].n); if (n) res[k] = { ...res[k], n }; } catch (e) { ok = false; } }
+    while (i < res.length) { const k = i++; try { const r = await naturalName(res[k].n, src); res[k] = { ...res[k], n: r.name }; if (!r.ok) ok = false; } catch (e) { ok = false; } }
   }));
   return { rows: res, ok };
 }
@@ -961,16 +1049,22 @@ async function viewExpense(id, tripId) {
       let r;
       try { await wk.setParameters({ tessedit_pageseg_mode: '6', preserve_interword_spaces: '1' }); r = await wk.recognize(cv); } finally { try { await wk.terminate(); } catch (e) {} }
       if (scanHook !== scanFile) return;
-      let rows = parseReceipt(r.data.text, lg[0]), tmsg = '';
+      const pr = parseReceipt(r.data.text, lg[0]); let rows = pr.items, tmsg = '';
       if (lg[0] !== 'en' && rows.length) {
         scanning = 'Translating to English...'; const el = document.getElementById('scm'); if (el) el.textContent = scanning;
         const tt = await translateRows(rows, lg[0]); rows = tt.rows;
-        if (!tt.ok) tmsg = ' Some names could not be translated and were kept as scanned.';
+        if (!tt.ok) tmsg = ' Some names could not be fully translated; check them.';
       }
       if (scanHook !== scanFile) return;
       d.items = d.items.filter(x => x.n || x.p).concat(rows.map(x => ({ n: x.n, p: x.p, c: [] })));
       if (!d.items.length) d.items = [{ n: '', p: '', c: [] }];
-      scanning = rows.length ? rows.length + ' items added. Check names and prices below.' + tmsg : (lg[0] === 'en' ? 'No items found. If the receipt is not in English, choose its language above and scan again. Otherwise try a flatter, brighter photo.' : 'No items found. Try a flatter, brighter photo, or add items by hand.');
+      let fmsg = '';
+      if (rows.length && pr.fee != null) {
+        if (!(parseFloat(d.fee) > 0)) { d.fee = String(pr.fee); fmsg = ' Service charge and taxes set to ' + pr.fee + '%.'; }
+        else fmsg = ' The receipt shows ' + pr.fee + '% service charge and taxes; your current ' + d.fee + '% was kept.';
+      }
+      if (rows.length && pr.mismatch) fmsg += ' Items add up to ' + pr.sumI.toFixed(2) + ' but the receipt subtotal is ' + pr.sub.toFixed(2) + ', so some items may be missing.';
+      scanning = rows.length ? rows.length + ' items added.' + fmsg + tmsg + ' Check names and prices below.' : (lg[0] === 'en' ? 'No items found. If the receipt is not in English, choose its language above and scan again. Otherwise try a flatter, brighter photo.' : 'No items found. Try a flatter, brighter photo, or add items by hand.');
     } catch (e) { if (scanHook !== scanFile) return; scanning = 'Scan failed: ' + e.message; }
     draw();
   };
