@@ -271,7 +271,8 @@ const CFG = { apiKey: "AIzaSyAFVezfimw-kP3_tq-b3DuJ1jP0agB20NM", authDomain: "bi
 
 const app = document.getElementById('app');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const rm = n => 'RM ' + (Math.round(n * 100) / 100).toFixed(2);
+const money = n => (Math.round((+n || 0) * 100) / 100 + 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const rm = n => 'RM ' + money(n);
 const rid = () => Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 5);
 const ls = {
   get(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch { return d; } },
@@ -290,7 +291,7 @@ function addHist(t, id, name) {
 
 const CURS = ['MYR', 'SGD', 'USD', 'EUR', 'GBP', 'JPY', 'THB', 'IDR', 'AUD', 'CNY', 'KRW', 'INR'];
 const iso = t => { const x = new Date(t); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
-const fmt = (n, c) => (c || 'MYR') + ' ' + (Math.round(n * 100) / 100).toFixed(2);
+const fmt = (n, c) => (c || 'MYR') + ' ' + money(n);
 // ---------- maths ----------
 function splitOK(i) {
   const c = i.claims || [], x = i.split;
@@ -688,7 +689,7 @@ function viewTrip(id) {
           rows.sort((a, b) => eff(b.s) - eff(a.s));
           const s0 = rows[0].s;
           const g = rows.reduce((m, r) => ({ c1: r.s.c1, c2: r.s.c2, t1: m.t1 + r.s.t1, t2: m.t2 + r.s.t2, n: m.n + r.s.e + r.s.c }), { t1: 0, t2: 0, n: 0 }), gx = dir(g, k), h = dir(s0, k);
-          return `<div class="dd"><table class="tb"><tr><th>Name</th><th>Rate</th><th>${h.f}</th><th>${h.t}</th><th>Sources</th></tr>${rows.map((r, i) => { const x = dir(r.s, k); return `<tr class="${i === 0 && rows.length > 1 ? 'pos' : ''}"><td>${esc(r.n)}${i === 0 && rows.length > 1 ? ' (best)' : ''}</td><td>${(x.tt / x.ft).toPrecision(6)}</td><td>${x.ft.toFixed(2)}</td><td>${x.tt.toFixed(2)}</td><td>${r.s.e + r.s.c}</td></tr>`; }).join('')}<tr class="grp"><td>Group</td><td>${(gx.tt / gx.ft).toPrecision(6)}</td><td>${gx.ft.toFixed(2)}</td><td>${gx.tt.toFixed(2)}</td><td>${g.n}</td></tr></table><p class="m">Best means the most ${rc1 ? s0.c1 : s0.c2} received per ${rc1 ? s0.c2 : s0.c1} paid.</p></div>`;
+          return `<div class="dd"><table class="tb"><tr><th>Name</th><th>Rate</th><th>${h.f}</th><th>${h.t}</th><th>Sources</th></tr>${rows.map((r, i) => { const x = dir(r.s, k); return `<tr class="${i === 0 && rows.length > 1 ? 'pos' : ''}"><td>${esc(r.n)}${i === 0 && rows.length > 1 ? ' (best)' : ''}</td><td>${(x.tt / x.ft).toPrecision(6)}</td><td>${money(x.ft)}</td><td>${money(x.tt)}</td><td>${r.s.e + r.s.c}</td></tr>`; }).join('')}<tr class="grp"><td>Group</td><td>${(gx.tt / gx.ft).toPrecision(6)}</td><td>${money(gx.ft)}</td><td>${money(gx.tt)}</td><td>${g.n}</td></tr></table><p class="m">Best means the most ${rc1 ? s0.c1 : s0.c2} received per ${rc1 ? s0.c2 : s0.c1} paid.</p></div>`;
         };
         const mc = (trip.conversions || []).filter(c => c.who === me);
         const populated = keys.length > 0 || mc.length > 0;
@@ -1063,7 +1064,7 @@ async function viewExpense(id, tripId) {
         if (!(parseFloat(d.fee) > 0)) { d.fee = String(pr.fee); fmsg = ' Service charge and taxes set to ' + pr.fee + '%.'; }
         else fmsg = ' The receipt shows ' + pr.fee + '% service charge and taxes; your current ' + d.fee + '% was kept.';
       }
-      if (rows.length && pr.mismatch) fmsg += ' Items add up to ' + pr.sumI.toFixed(2) + ' but the receipt subtotal is ' + pr.sub.toFixed(2) + ', so some items may be missing.';
+      if (rows.length && pr.mismatch) fmsg += ' Items add up to ' + money(pr.sumI) + ' but the receipt subtotal is ' + money(pr.sub) + ', so some items may be missing.';
       scanning = rows.length ? rows.length + ' items added.' + fmsg + tmsg + ' Check names and prices below.' : (lg[0] === 'en' ? 'No items found. If the receipt is not in English, choose its language above and scan again. Otherwise try a flatter, brighter photo.' : 'No items found. Try a flatter, brighter photo, or add items by hand.');
     } catch (e) { if (scanHook !== scanFile) return; scanning = 'Scan failed: ' + e.message; }
     draw();
