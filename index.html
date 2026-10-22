@@ -267,6 +267,8 @@ input,select,textarea{font-size:max(16px,1rem)}
 <script>
 // ====== PASTE YOUR FIREBASE CONFIG HERE (Firebase console > Project settings > Your apps > Web) ======
 const CFG = { apiKey: "AIzaSyAFVezfimw-kP3_tq-b3DuJ1jP0agB20NM", authDomain: "bill-split-b622d.firebaseapp.com", projectId: "bill-split-b622d", appId: "1:408745893445:web:832f4188ae4b62eb154d2c" };
+// Address of your receipt-reading Worker (see receipt-worker.js). Leave '' to use only the offline scanner.
+const AI_SCAN_URL = 'https://receipt-worker.bipmantiss.workers.dev';
 // =======================================================================================================
 
 const app = document.getElementById('app');
@@ -403,6 +405,35 @@ const catName = k => { const c = CATS.find(x => x[0] === k); return c ? c[1] + '
 const catOpts = v => '<option value="">No category</option>' + CATS.map(c => `<option value="${c[0]}" ${v === c[0] ? 'selected' : ''}>${c[1]} ${c[2]}</option>`).join('');
 const CAT_COL = ['var(--coral)', 'var(--sun)', 'var(--teal)', 'var(--acc)', '#9B7BD0', '#6FA8DC', '#B5A642', '#C77DA5', '#E0508A', '#8D7052'];
 const LANGS = [['en', 'English (no translation)', 'eng'], ['zh-CN', 'Chinese (Simplified)', 'chi_sim+eng'], ['zh-TW', 'Chinese (Traditional)', 'chi_tra+eng'], ['ja', 'Japanese', 'jpn+eng'], ['ko', 'Korean', 'kor+eng'], ['th', 'Thai', 'tha+eng'], ['ms', 'Malay', 'eng'], ['id', 'Indonesian', 'eng'], ['vi', 'Vietnamese', 'vie+eng'], ['es', 'Spanish', 'spa+eng'], ['fr', 'French', 'fra+eng'], ['de', 'German', 'deu+eng'], ['it', 'Italian', 'ita+eng'], ['pt', 'Portuguese', 'por+eng']];
+// ===== AI receipt reading (optional, through your own Worker) =====
+async function aiPhoto(file) {
+  let bmp;
+  try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { bmp = await createImageBitmap(file); }
+  const sc = Math.min(1, 1600 / Math.max(bmp.width, bmp.height)), cv = document.createElement('canvas');
+  cv.width = Math.round(bmp.width * sc); cv.height = Math.round(bmp.height * sc);
+  const x = cv.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, cv.width, cv.height); x.imageSmoothingQuality = 'high'; x.drawImage(bmp, 0, 0, cv.width, cv.height);
+  return cv.toDataURL('image/jpeg', 0.85).split(',')[1];
+}
+async function aiScan(file) {
+  const image = await aiPhoto(file), ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 45000);
+  try {
+    const r = await fetch(AI_SCAN_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ image, mime: 'image/jpeg' }), signal: ctl.signal });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'AI scan failed (' + r.status + ')');
+    return j;
+  } finally { clearTimeout(t); }
+}
+function aiToParsed(ai) {
+  const nn = v => { const x = typeof v === 'number' ? v : parseFloat(v); return Number.isFinite(x) ? x : null; };
+  const items = (ai.items || []).map(i => ({ n: String(i.name || i.original || '').trim().slice(0, 60), p: nn(i.price) })).filter(i => i.n && i.p !== null && i.p >= 0).map(i => ({ n: i.n, p: String(Math.round(i.p * 100) / 100) }));
+  const sumI = items.reduce((a, r) => a + parseFloat(r.p), 0), sub = nn(ai.subtotal), tot = nn(ai.total), svc = nn(ai.serviceCharge), tax = nn(ai.tax);
+  const base = sub != null ? sub : sumI; let fee = null;
+  if ((svc || tax) && base > 0) fee = ((svc || 0) + (tax || 0)) / base * 100;
+  else if (!svc && !tax && tot != null && base > 0 && tot > base * 1.005) fee = (tot - base) / base * 100;
+  else if (nn(ai.serviceChargePercent) != null || nn(ai.taxPercent) != null) fee = (nn(ai.serviceChargePercent) || 0) + (nn(ai.taxPercent) || 0);
+  if (fee != null) { fee = Math.round(fee * 100) / 100; if (!(fee > 0) || fee > 40) fee = null; }
+  return { items, sub, tot, svc, tax, fee, sumI, mismatch: sub != null && items.length > 0 && Math.abs(sumI - sub) > Math.max(0.5, sub * 0.005) };
+}
 // ===== receipt reading: items, fees, totals =====
 const K_OTHER = /点数|點數|total\s*(items?|qty|quantity)|item\s*count|お釣|お預|現計|現金|现金|\bcash\b|tender|\bchange\b|rounding|端数|丸め|discount|割引|折扣|할인|\bcard\b|visa|master\s?card|amex|\bpaid\b|payment|balance|\bdue\b|deposit|voucher|coupon|\bpoints?\b|お会計/i;
 const K_SUB = /sub\s*-?\s*total|小\s*計|小\s*计|소계|jumlah\s*kecil|sous-?total|zwischensumme|subtotale|ยอดรวมย่อย/i;
@@ -999,7 +1030,7 @@ async function viewExpense(id, tripId) {
       main = `<div class="card"><h2>Fees on the whole bill</h2><div class="f feebox"><input type="number" inputmode="decimal" step="0.01" min="0" data-f="fee" placeholder="Service charge + taxes" title="Service charge + taxes" aria-label="Service charge plus taxes, percent" value="${esc(d.fee)}"><span class="pct" aria-hidden="true">%</span></div><p class="m" id="feeLine"></p><hr class="sep">
       <h2 style="margin-top:6px">Items</h2>${d.items.map((it, i) => `<div class="f"><input data-f="in" data-i="${i}" placeholder="Item" aria-label="Item name" value="${esc(it.n)}"><input type="number" inputmode="decimal" step="0.01" min="0" style="width:84px" data-f="ip" data-i="${i}" placeholder="Cost" aria-label="Cost" value="${esc(it.p)}"><button class="s" data-a="who" data-i="${i}" aria-label="Who bought this">${HEAD}${it.c.length ? ' ' + it.c.length : ''}</button><button class="x" data-a="rmv" data-i="${i}" aria-label="Remove row">✕</button></div>
       ${ui.who === i ? `<div class="dd"><div class="ph"><b>Who bought this?</b><span><button class="s" data-a="wa">${M.every(m => it.c.includes(m)) ? 'Unselect all' : 'Select all'}</button> <button data-a="wd">Done</button></span></div>${ticks(M, it.c, 'wt')}</div>` : ''}`).join('')}
-      <div class="bar"><button class="s" data-a="addrow">+ Add row</button><button class="s" data-a="cam">Scan receipt</button><button class="s" data-a="gal">From gallery</button></div><div class="row" style="border:0;padding:6px 0 0"><span class="m">Receipt language</span><select data-f="rlang" aria-label="Receipt language">${LANGS.map(l => `<option value="${l[0]}" ${(d.rlang || ls.get('rlang', 'en')) === l[0] ? 'selected' : ''}>${l[1]}</option>`).join('')}</select></div><p class="m" id="scm">${esc(scanning)}</p><p class="m" id="tot"></p></div>`;
+      <div class="bar"><button class="s" data-a="addrow">+ Add row</button><button class="s" data-a="cam">Scan receipt</button><button class="s" data-a="gal">From gallery</button></div><div class="row" style="border:0;padding:6px 0 0"><span class="m">Receipt language${AI_SCAN_URL ? ' (offline scan only)' : ''}</span><select data-f="rlang" aria-label="Receipt language">${LANGS.map(l => `<option value="${l[0]}" ${(d.rlang || ls.get('rlang', 'en')) === l[0] ? 'selected' : ''}>${l[1]}</option>`).join('')}</select></div><p class="m" id="scm">${esc(scanning)}</p><p class="m" id="tot"></p></div>`;
     }
     const fxCard = `<div class="card"><h2>Actual amount charged (optional)</h2><p class="m">What your card or bank really charged, in another currency. It only feeds your conversion rate on the Members page and never changes the split.</p><div class="f"><input type="number" inputmode="decimal" step="0.01" min="0" data-f="fxAmt" placeholder="Amount" aria-label="Actual amount charged" value="${esc(d.fxAmt)}"><select data-f="fxCur" aria-label="Currency charged">${CURS.map(c => `<option ${c === d.fxCur ? 'selected' : ''}>${c}</option>`).join('')}</select></div></div>`;
     app.innerHTML = `<div class="hd"><a href="${tripId ? '#/t/' + esc(tripId) : '#/'}">‹ ${tripId ? 'Group' : 'Groups'}</a><h1>${id ? 'Edit expense' : 'Add expense'}</h1></div>${top}${head}${main}${fxCard}
@@ -1043,6 +1074,25 @@ async function viewExpense(id, tripId) {
   };
   const scanFile = async f => {
     scanning = 'Preparing photo...'; draw();
+    if (AI_SCAN_URL) {
+      try {
+        scanning = 'Reading receipt with AI...'; draw();
+        const ai = await aiScan(f);
+        if (scanHook !== scanFile) return;
+        const pr = aiToParsed(ai), rows = pr.items;
+        d.items = d.items.filter(x => x.n || x.p).concat(rows.map(x => ({ n: x.n, p: x.p, c: [] })));
+        if (!d.items.length) d.items = [{ n: '', p: '', c: [] }];
+        let fmsg = '';
+        if (rows.length && pr.fee != null) {
+          if (!(parseFloat(d.fee) > 0)) { d.fee = String(pr.fee); fmsg = ' Service charge and taxes set to ' + pr.fee + '%.'; }
+          else fmsg = ' The receipt shows ' + pr.fee + '% service charge and taxes; your current ' + d.fee + '% was kept.';
+        }
+        if (rows.length && pr.mismatch) fmsg += ' Items add up to ' + money(pr.sumI) + ' but the receipt subtotal is ' + money(pr.sub) + ', so some items may be missing.';
+        if (rows.length && ai.currency && ai.currency !== d.cur && CURS.includes(ai.currency)) fmsg += ' The receipt looks like ' + ai.currency + '; check the currency above.';
+        scanning = rows.length ? rows.length + ' items added (read with AI).' + fmsg + ' Check names and prices below.' : 'No items found. Try a flatter, brighter photo, or add items by hand.';
+        draw(); return;
+      } catch (e) { if (scanHook !== scanFile) return; scanning = 'AI scan unavailable (' + (e && e.message ? e.message : 'error') + '). Using the offline scanner...'; draw(); }
+    }
     try {
       const [T, cv] = await Promise.all([loadTess(), prepPhoto(f)]);
       const rl = d.rlang || ls.get('rlang', 'en'), lg = LANGS.find(x => x[0] === rl) || LANGS[0];
