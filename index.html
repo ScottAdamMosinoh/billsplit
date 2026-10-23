@@ -397,7 +397,7 @@ async function aiPhoto(file) {
   return cv.toDataURL('image/jpeg', 0.85).split(',')[1];
 }
 async function aiScan(file) {
-  const image = await aiPhoto(file), ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 45000);
+  const image = await aiPhoto(file), ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 90000);
   try {
     let r;
     try { r = await fetch(AI_SCAN_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ image, mime: 'image/jpeg' }), signal: ctl.signal }); }
@@ -903,8 +903,9 @@ async function viewExpense(id, tripId) {
   const scanFile = async f => {
     if (!AI_SCAN_URL) { scanning = 'AI scanning is not set up yet. Add the items by hand, or finish the AI setup.'; draw(); return; }
     scanning = 'Reading receipt with AI...'; draw();
+    const slow = setTimeout(() => { if (scanHook === scanFile) { scanning = 'Still reading the receipt. The AI service can be slow at busy times, so this may take up to a minute...'; const el = document.getElementById('scm'); if (el) el.textContent = scanning; } }, 15000);
     try {
-      const ai = await aiScan(f);
+      const ai = await aiScan(f).finally(() => clearTimeout(slow));
       if (scanHook !== scanFile) return;
       const pr = aiToParsed(ai), rows = pr.items;
       d.items = d.items.filter(x => x.n || x.p).concat(rows.map(x => ({ n: x.n, p: x.p, c: [] })));
