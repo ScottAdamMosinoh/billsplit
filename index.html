@@ -143,6 +143,9 @@ input,select,textarea{font-size:max(16px,1rem)}
 .fl{display:block;margin:10px 0 4px;font-size:.85rem}
 .busy{text-align:center;max-width:280px}.busy .m{margin:12px 0 0}.spin{width:34px;height:34px;margin:4px auto 0;border-radius:50%;border:4px solid var(--line);border-top-color:var(--acc);animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+.trace{margin:0 0 12px;padding:9px 12px;border-radius:16px;background:var(--bg);box-shadow:inset 0 0 0 1.5px var(--line);font-size:.85rem}.trace .m{font-size:.82rem;margin:4px 0 0}
+.tls{margin:6px 0 2px}.tl{display:flex;justify-content:space-between;gap:10px;padding:3px 0;border-bottom:1px dashed var(--line)}.tl>span:last-child{white-space:nowrap}
+.trace .tot{margin-top:6px;padding-top:6px;font-weight:600}.lnk{padding:4px 10px;font-size:.8rem;margin-top:4px}
 </style>
 </head>
 <body>
@@ -351,6 +354,36 @@ function balances(bills, sets, cur) {
   });
   (sets || []).filter(s => (s.cur || 'MYR') === cur).forEach(s => { add(s.from, s.amt); add(s.to, -s.amt); });
   return bal;
+}
+// D[a][b] = what a owes b, from expenses (a's share when b paid) minus recorded payments from a to b
+function debtMatrix(bills, sets, cur) {
+  const D = {}, add = (a, b, v) => { (D[a] = D[a] || {})[b] = ((D[a] || {})[b] || 0) + v; };
+  bills.forEach(b => {
+    if (!b.payer || (b.currency || 'MYR') !== cur) return;
+    Object.entries(calc(b).per).forEach(([n, v]) => { if (n !== b.payer && v > 0.005) add(n, b.payer, v); });
+  });
+  (sets || []).filter(x => (x.cur || 'MYR') === cur).forEach(x => add(x.from, x.to, -x.amt));
+  return D;
+}
+const pairNet = (D, a, b) => ((D[a] || {})[b] || 0) - ((D[b] || {})[a] || 0);
+// the history behind one transfer F -> T: direct lines between the two people, then each one's position with everybody else
+function traceFor(bills, sets, cur, F, T, members) {
+  const lines = [];
+  bills.forEach(b => {
+    if (!b.payer || (b.currency || 'MYR') !== cur) return;
+    const per = calc(b).per, date = b.date || iso(b.created || Date.now());
+    if (b.payer === T && per[F] > 0.005) lines.push({ date, k: b.created || 0, text: b.name, note: F + "'s share, paid by " + T, d: per[F] });
+    else if (b.payer === F && per[T] > 0.005) lines.push({ date, k: b.created || 0, text: b.name, note: T + "'s share, paid by " + F, d: -per[T] });
+  });
+  (sets || []).filter(x => (x.cur || 'MYR') === cur).forEach(x => {
+    const date = iso(x.t || Date.now());
+    if (x.from === F && x.to === T) lines.push({ date, k: x.t || 0, text: 'Payment', note: F + ' paid ' + T, d: -x.amt });
+    else if (x.from === T && x.to === F) lines.push({ date, k: x.t || 0, text: 'Payment', note: T + ' paid ' + F, d: x.amt });
+  });
+  lines.sort((a, b) => a.date.localeCompare(b.date) || a.k - b.k);
+  let run = 0; lines.forEach(l => { run += l.d; l.run = run; });
+  const D = debtMatrix(bills, sets, cur), others = P => (members || []).filter(m => m !== P && m !== (P === F ? T : F)).map(m => ({ who: m, v: pairNet(D, P, m) })).filter(x => Math.abs(x.v) > 0.005);
+  return { lines, direct: pairNet(D, F, T), fOthers: others(F), tOthers: others(T) };
 }
 function suggest(bal) {
   const d = [], c = [];
@@ -642,7 +675,7 @@ function viewTrip(id) {
       if (ls.get('me_' + id, '') === n) ls.set('me_' + id, '');
     },
     am: () => { const n = (prompt('Name') || '').trim(); if (n) ref.update({ members: FV.arrayUnion(n) }); },
-    st: el => { ref.update({ settlements: FV.arrayUnion({ from: el.dataset.f, to: el.dataset.t, amt: +el.dataset.v, cur: el.dataset.c, t: Date.now() }) }); },
+    st: el => { const busy = busyDialog('Recording payment...'); ref.update({ settlements: FV.arrayUnion({ from: el.dataset.f, to: el.dataset.t, amt: +el.dataset.v, cur: el.dataset.c, t: Date.now() }) }).catch(() => errBox('Could not record the payment. Check your connection and try again.')).finally(() => busy.close()); },
     pp: el => {
       const n = el.dataset.n, c = el.dataset.c, mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const rows = []; let paid = 0; const cats = {};
@@ -669,19 +702,33 @@ function viewTrip(id) {
       const n = el.dataset.n, c = el.dataset.c;
       const bal = balances(bills, trip.settlements || [], c);
       const list = suggest(bal).filter(x => x.from === n || x.to === n);
+      const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], meN = ls.get('me_' + id, '');
+      const dt = d => { const q = d.split('-'); return q.length === 3 ? mon[+q[1] - 1] + ' ' + (+q[2]) : d; };
+      const who = (a, v1, v2) => (a === meN ? 'You ' + v1 : a + ' ' + v2);
+      const sideTxt = (P, o) => o.length ? o.map(y => y.v > 0 ? who(P, 'owe', 'owes') + ' ' + esc(y.who) + ' ' + fmt(y.v, c) : esc(y.who) + ' owes ' + (P === meN ? 'you' : esc(P)) + ' ' + fmt(-y.v, c)).join('; ') : '';
+      const traceHtml = x => {
+        const t = traceFor(bills, trip.settlements || [], c, x.from, x.to, trip.members), L = t.lines, keep = 4;
+        const rows = L.map((l, k) => `<div class="tl"${k < L.length - keep ? ' hidden data-old' : ''}><span>${esc(dt(l.date))} · ${esc(l.text)}<br><span class="m">${esc(l.note)}</span></span><span>${l.d > 0 ? '+' : '−'}${fmt(Math.abs(l.d), c)}</span></div>`).join('');
+        const dir = t.direct > 0.005 ? who(x.from, 'owe', 'owes') + ' ' + esc(x.to) + ' ' + fmt(t.direct, c) + ' directly' : t.direct < -0.005 ? esc(x.to) + ' ' + (x.to === meN ? 'owe' : 'owes') + ' ' + (x.from === meN ? 'you' : esc(x.from)) + ' ' + fmt(-t.direct, c) + ' directly' : 'Nothing is owed directly between ' + (x.from === meN ? 'you' : esc(x.from)) + ' and ' + (x.to === meN ? 'you' : esc(x.to));
+        const same = Math.abs(t.direct - x.amt) < 0.01;
+        return `<div class="trace"><b>How this adds up</b>${rows ? '<div class="tls">' + rows + '</div>' : '<p class="m">No direct expenses or payments between them.</p>'}${L.length > keep ? `<button class="s lnk" data-more>Show all ${L.length}</button>` : ''}<div class="tot"><span>${dir}</span></div>${same ? '<p class="m">This is exactly what the two of you owe each other, so the plan pays it directly.</p>' : `<p class="m">The plan pays ${fmt(x.amt, c)} instead of ${fmt(Math.max(0, t.direct), c)} because debts are combined across the group to need fewer payments.${[sideTxt(x.from, t.fOthers), sideTxt(x.to, t.tOthers)].filter(Boolean).length ? ' Also counted: ' + [sideTxt(x.from, t.fOthers), sideTxt(x.to, t.tOthers)].filter(Boolean).join('; ') + '.' : ''}</p>`}</div>`;
+      };
       const ov = document.createElement('div'); ov.className = 'ov';
-      ov.innerHTML = `<div class="mb" role="dialog" aria-modal="true" aria-label="Settle up ${esc(n)}"><h2>Settle up: ${esc(n)}</h2>${list.map((x, i) => `<div class="row"><span class="n">${x.from === n ? esc(n) + ' pays ' + esc(x.to) : esc(x.from) + ' pays ' + esc(n)}</span><span class="amt">${fmt(x.amt, c)}</span><button data-i="${i}">Settle up</button></div>`).join('') || '<p class="m">Nothing to settle.</p>'}<div class="bar" style="justify-content:flex-end"><button class="s" data-close>Close</button></div></div>`;
+      ov.innerHTML = `<div class="mb" role="dialog" aria-modal="true" aria-label="Settle up ${esc(n)}" style="max-height:88vh;overflow:auto"><h2>Settle up: ${esc(n)}</h2>${list.map((x, i) => `<div class="ti"><div class="row"><span class="n">${x.from === n ? esc(n) + ' pays ' + esc(x.to) : esc(x.from) + ' pays ' + esc(n)}</span><span class="amt">${fmt(x.amt, c)}</span><button data-i="${i}">Settle up</button></div>${traceHtml(x)}</div>`).join('') || '<p class="m">Nothing to settle.</p>'}<div class="bar" style="justify-content:flex-end"><button class="s" data-close>Close</button></div></div>`;
       const close = () => { document.removeEventListener('keydown', kd, true); ov.remove(); };
       const kd = e => { if (e.key === 'Escape') close(); };
       ov.addEventListener('click', e => {
         if (e.target === ov || e.target.closest('[data-close]')) return close();
+        const more = e.target.closest('[data-more]');
+        if (more) { const box = more.closest('.trace'); box.querySelectorAll('[data-old]').forEach(z => z.hidden = false); more.remove(); return; }
         const b = e.target.closest('button[data-i]'); if (!b) return;
         const x = list[+b.dataset.i]; if (!x || x.done) return;
         x.done = true; b.disabled = true;
-        const row = b.closest('.row'); if (row) row.remove();
-        if (!list.some(y => !y.done)) close();
+        const busy = busyDialog('Recording payment...');
         ref.update({ settlements: FV.arrayUnion({ from: x.from, to: x.to, amt: x.amt, cur: c, t: Date.now() }) })
-          .catch(() => errBox('Could not record the payment. Check your connection and try again.'));
+          .then(() => { const row = b.closest('.ti'); if (row) row.remove(); if (!list.some(y => !y.done)) close(); })
+          .catch(() => { x.done = false; b.disabled = false; errBox('Could not record the payment. Check your connection and try again.'); })
+          .finally(() => busy.close());
       });
       document.addEventListener('keydown', kd, true);
       document.body.appendChild(ov);
@@ -691,8 +738,10 @@ function viewTrip(id) {
       if (!s) return;
       const ok = await modal({ title: 'Undo this payment?', msg: s.from + ' paid ' + s.to + ' ' + fmt(s.amt, s.cur) + '. This puts the amount back on the balances.', ok: 'Undo' });
       if (!ok) return;
+      const busy = busyDialog('Undoing payment...');
       try { await ref.update({ settlements: list.filter((_, k) => k !== i) }); }
       catch (e) { errBox('Could not undo the payment. Check your connection and try again.'); }
+      finally { busy.close(); }
     }
   });
   app.oninput = e => { const f = e.target.dataset.f; if (f) cv[f] = e.target.value; };
@@ -788,11 +837,13 @@ function viewDetail(id) {
     const { cu, pay, left, sets } = info(), ref = tripId && db.collection('trips').doc(tripId);
     if (a === 'sp') {
       const amt = left(n); if (!(amt > 0.005) || !ref || !pay) return;
-      ref.update({ settlements: FV.arrayUnion({ from: n, to: pay, amt, cur: cu, bill: id, t: Date.now() }) }).catch(() => errBox('Could not record the payment. Check your connection and try again.'));
+      const busy = busyDialog('Recording payment...');
+      ref.update({ settlements: FV.arrayUnion({ from: n, to: pay, amt, cur: cu, bill: id, t: Date.now() }) }).catch(() => errBox('Could not record the payment. Check your connection and try again.')).finally(() => busy.close());
     } else if (a === 'su') {
       modal({ title: 'Undo this payment?', msg: n + ' paid ' + pay + ' for this expense. This puts the amount back on the balances.', ok: 'Undo' }).then(ok => {
         if (!ok || !ref) return;
-        ref.update({ settlements: (trip.settlements || []).filter(x => !(x.bill === id && x.from === n && x.to === pay)) }).catch(() => errBox('Could not undo the payment. Check your connection and try again.'));
+        const busy = busyDialog('Undoing payment...');
+        ref.update({ settlements: (trip.settlements || []).filter(x => !(x.bill === id && x.from === n && x.to === pay)) }).catch(() => errBox('Could not undo the payment. Check your connection and try again.')).finally(() => busy.close());
       });
     }
   };
@@ -977,7 +1028,13 @@ async function viewExpense(id, tripId) {
     cam: () => document.getElementById('rcam').click(),
     gal: () => document.getElementById('rgal').click(),
     save,
-    del: () => { if (confirm('Delete this expense for everyone?')) db.collection('bills').doc(id).delete().then(() => { ls.set('hist', ls.get('hist', []).filter(x => x.id !== id)); back(); }); }
+    del: async () => {
+      const ok = await modal({ title: 'Delete this expense?', msg: 'It will be removed for everyone in the group.', ok: 'Delete' });
+      if (!ok) return;
+      const busy = busyDialog('Deleting expense...');
+      try { await db.collection('bills').doc(id).delete(); ls.set('hist', ls.get('hist', []).filter(x => x.id !== id)); busy.close(); back(); }
+      catch (e) { busy.close(); errBox('Could not delete the expense. Check your connection and try again.'); }
+    },
   });
   app.oninput = e => {
     const t = e.target, f = t.dataset.f;
