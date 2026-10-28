@@ -141,6 +141,8 @@ input,select,textarea{font-size:max(16px,1rem)}
 .stg{font-size:16px!important}.stg *{font-size:inherit!important}.stg h2{font-size:20px!important}.stg .m,.stg .szs{font-size:14px!important}.stg button,.stg select{font-size:15px!important}.stg [data-fprev]{font-size:1rem!important}
 .arow.tap{cursor:pointer;border-radius:14px;padding:4px 6px;margin:8px -6px}.arow.tap:active{background:var(--accbg)}a.exr{color:var(--ink);text-decoration:none;font-weight:400}.mb .row .amt{white-space:nowrap}
 .fl{display:block;margin:10px 0 4px;font-size:.85rem}
+.busy{text-align:center;max-width:280px}.busy .m{margin:12px 0 0}.spin{width:34px;height:34px;margin:4px auto 0;border-radius:50%;border:4px solid var(--line);border-top-color:var(--acc);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -727,6 +729,17 @@ const errBox = m => modal({ title: 'Error', msg: m, noCancel: true });
 const HEAD = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z"/></svg>';
 const r2 = x => Math.round(x * 100) / 100;
 const sumOf = (o, M) => M.reduce((a, m) => a + (+o[m] || 0), 0);
+// a dialog that blocks the screen while something is being saved, so it cannot be submitted twice
+function busyDialog(text) {
+  const ov = document.createElement('div'); ov.className = 'ov';
+  ov.innerHTML = '<div class="mb busy" role="alertdialog" aria-modal="true" aria-busy="true" aria-live="polite" aria-label="' + esc(text) + '"><div class="spin" aria-hidden="true"></div><p class="m" data-bt>' + esc(text) + '</p></div>';
+  const block = e => { e.stopPropagation(); e.preventDefault(); };
+  const kd = e => { if (e.key !== 'Tab') block(e); else e.preventDefault(); };
+  ov.addEventListener('click', block); document.addEventListener('keydown', kd, true);
+  document.body.appendChild(ov);
+  const slow = setTimeout(() => { const t = ov.querySelector('[data-bt]'); if (t) t.textContent = 'Still saving. This is taking longer than usual, please keep this page open...'; }, 8000);
+  return { close() { clearTimeout(slow); document.removeEventListener('keydown', kd, true); ov.remove(); } };
+}
 function viewDetail(id) {
   let b = null, trip = null, tripId = null, tsub = false;
   const meName = () => tripId ? ls.get('me_' + tripId, '') : '';
@@ -865,7 +878,9 @@ async function viewExpense(id, tripId) {
     <div class="bar"><button data-a="save">Save expense</button>${d.lock ? '<button class="s" data-a="lk">Change password</button><button class="s" data-a="rl">Remove lock</button>' : '<button class="s" data-a="lk">Lock expense</button>'}${id ? '<button class="s" data-a="del">Delete</button>' : ''}</div>`;
     hint();
   };
+  let saving = false;
   const save = async () => {
+    if (saving) return;
     const name = d.name.trim(), M = members();
     if (!name) return alert('Enter a description.');
     if (!d.payer) return alert('Choose who paid.');
@@ -893,12 +908,15 @@ async function viewExpense(id, tripId) {
       if (d.fxCur === d.cur) return alert('The actual amount must be in a different currency from the expense.');
       o.fx = { cur: d.fxCur, amt: fa }; ls.set('fxcur', d.fxCur);
     }
+    saving = true;
+    const busy = busyDialog('Saving expense...');
     try {
       const nid = id || rid();
       await db.collection('bills').doc(nid).set(o);
       if (!tripId) addHist('b', nid, name);
-      back();
-    } catch (e) { alert('Could not save: ' + e.message); }
+      busy.close(); back();
+    } catch (e) { busy.close(); alert('Could not save: ' + e.message); }
+    finally { saving = false; }
   };
   const scanFile = async f => {
     if (!AI_SCAN_URL) { scanning = 'AI scanning is not set up yet. Add the items by hand, or finish the AI setup.'; draw(); return; }
