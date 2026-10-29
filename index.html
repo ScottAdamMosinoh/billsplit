@@ -150,6 +150,7 @@ input,select,textarea{font-size:max(16px,1rem)}
 .tgl{display:inline-flex;gap:4px;padding:3px;border-radius:999px;box-shadow:inset 0 0 0 1.5px var(--line);margin:0 0 8px;background:var(--paper)}.tgl button{padding:4px 14px;font-size:.82rem;background:transparent;color:var(--ink);box-shadow:none}.tgl button.on{background:var(--acc);color:var(--onacc)}
 .lg{padding:3px 0}.lgr{display:flex;justify-content:space-between;gap:10px}.lgr>span:last-child{white-space:nowrap}.lgr .neg{color:var(--bad)}.lgr .pos{color:var(--pos)}.lb{height:6px;border-radius:99px;margin-top:3px}.lb.bn{background:var(--bad)}.lb.bp{background:var(--pos)}
 .ds{width:100%;height:auto;display:block;margin-top:10px}.trace .tot .lgr{margin-top:2px}
+.cnt{display:flex;align-items:center;gap:10px;margin:2px 0 4px;font-size:.88rem}.cnt label{white-space:nowrap}.cnt input[type=range]{flex:1;min-width:0;accent-color:var(--acc);height:26px}
 </style>
 </head>
 <body>
@@ -407,30 +408,41 @@ function ledgerFor(bills, sets, cur, P) {
   let run = 0; L.forEach(l => { run += l.d; l.run = run; });
   return L;
 }
-// two small arrow pictures for F -> T: who owes whom directly, then what the plan asks for
-function arrowPicture(bills, sets, cur, F, T, members, plan, bal) {
-  const D = debtMatrix(bills, sets, cur);
-  const X = (members || []).filter(m => m !== F && m !== T).map(m => ({ m, w: Math.abs(pairNet(D, F, m)) + Math.abs(pairNet(D, T, m)) })).filter(z => z.w > 0.005).sort((a, b) => b.w - a.w)[0];
-  const ids = X ? [F, T, X.m] : [F, T], pos = [[56, 46], [304, 46], [180, 118]], R = 20, uid = 'ah' + Math.floor(Math.random() * 1e6);
-  const nm = n => { const t = String(n); return esc(t.length > 12 ? t.slice(0, 11) + '…' : t); };
-  const pairs = []; for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) pairs.push([ids[i], ids[j]]);
+// before/after arrow pictures for F -> T, with `count` people (2 to 10) arranged in a circle; F and T first, then whoever is most tied to them
+function arrowPicture(bills, sets, cur, F, T, members, plan, bal, count) {
+  const D = debtMatrix(bills, sets, cur), mem = members || [];
+  const inv = m => mem.reduce((a, j) => a + (j !== m ? Math.abs(pairNet(D, m, j)) : 0), 0);
+  const rank = mem.filter(m => m !== F && m !== T).map(m => ({ m, w: Math.abs(pairNet(D, F, m)) + Math.abs(pairNet(D, T, m)), v: inv(m) })).sort((a, b) => b.w - a.w || b.v - a.v);
+  const n = Math.max(2, Math.min(count || 10, 10, mem.length || 2)), ids = [F, T, ...rank.slice(0, n - 2).map(z => z.m)];
+  const r = n > 6 ? 13 : n > 4 ? 15 : 19, Rx = n === 2 ? 0 : n <= 3 ? 110 : n <= 6 ? 125 : 135, Ry = n === 2 ? 0 : n === 3 ? 46 : n === 4 ? 52 : n <= 6 ? 68 : n <= 7 ? 80 : 92, names = n <= 5, cx = 180;
+  const Hc = n === 2 ? 70 : 2 * (Ry + r + (names ? 16 : 0)) + 10, Hp = 24 + Hc, cy = 24 + Hc / 2;
+  const pos = new Array(n); let k = 0;
+  if (n === 2) { pos[0] = [70, cy]; pos[1] = [290, cy]; }
+  else {
+    const tIdx = Math.floor(n / 2), slots = [...Array(n).keys()].filter(i => i !== 0 && i !== tIdx), at = i => { const ang = Math.PI + 2 * Math.PI * i / n; return [cx + Rx * Math.cos(ang), cy + Ry * Math.sin(ang)]; };
+    pos[0] = at(0); pos[1] = at(tIdx); for (let q = 2; q < n; q++) pos[q] = at(slots[k++]);
+  }
+  const first = ids.map(z => [...String(z)][0] || '?'), lab = ids.map((z, i) => { const f = first[i]; if (first.filter(y => y === f).length === 1) return f.toUpperCase(); const t = [...String(z)].slice(0, 2).join(''); return ids.filter((y, j) => [...String(y)].slice(0, 2).join('') === t).length === 1 ? t : String(i + 1); });
+  const nm = z => { const t = String(z); return esc(t.length > 12 ? t.slice(0, 11) + '…' : t); };
+  const uid = 'ah' + Math.floor(Math.random() * 1e6), fs = n > 4 ? 11 : 12, dense = n > 6;
   const direct = [], planA = [];
-  pairs.forEach(([a, b]) => { const v = pairNet(D, a, b); if (v > 0.005) direct.push([a, b, v]); else if (v < -0.005) direct.push([b, a, -v]); });
+  for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) { const v = pairNet(D, ids[i], ids[j]); if (v > 0.005) direct.push([ids[i], ids[j], v]); else if (v < -0.005) direct.push([ids[j], ids[i], -v]); }
   plan.forEach(x => { if (ids.includes(x.from) && ids.includes(x.to)) planA.push([x.from, x.to, x.amt]); });
   const panel = (title, arrows, dy) => {
-    let o = `<text x="8" y="${dy + 4}" style="font-size:13px;font-weight:600;fill:var(--ink)">${title}</text>`;
+    let o = `<text x="8" y="${dy + 14}" style="font-size:13px;font-weight:600;fill:var(--ink)">${title}</text>`;
+    arrows.sort((a, b) => ((a[0] === F && a[1] === T) || (a[0] === T && a[1] === F)) - ((b[0] === F && b[1] === T) || (b[0] === T && b[1] === F)));
     arrows.forEach(([a, b, v]) => {
-      const p = pos[ids.indexOf(a)], q = pos[ids.indexOf(b)], dx = q[0] - p[0], dyy = q[1] - p[1], len = Math.hypot(dx, dyy), ux = dx / len, uy = dyy / len;
-      const x1 = p[0] + ux * (R + 3), y1 = p[1] + uy * (R + 3) + dy + 22, x2 = q[0] - ux * (R + 5), y2 = q[1] - uy * (R + 5) + dy + 22;
-      const mx = (x1 + x2) / 2 - uy * 11, my = (y1 + y2) / 2 + ux * 11;
-      o += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" style="stroke:var(--ink);stroke-width:1.6" marker-end="url(#${uid})"/><text x="${mx.toFixed(1)}" y="${(my + 4).toFixed(1)}" text-anchor="middle" style="font-size:12px;font-weight:600;fill:var(--ink)">${money(v)}</text>`;
+      const hi = (a === F && b === T) || (a === T && b === F), p = pos[ids.indexOf(a)], q = pos[ids.indexOf(b)], dx = q[0] - p[0], dyy = q[1] - p[1], len = Math.hypot(dx, dyy) || 1, ux = dx / len, uy = dyy / len;
+      const x1 = p[0] + ux * (r + 2), y1 = p[1] + uy * (r + 2) + dy, x2 = q[0] - ux * (r + 4), y2 = q[1] - uy * (r + 4) + dy, mx = (x1 + x2) / 2 - uy * 8, my = (y1 + y2) / 2 + ux * 8;
+      o += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" style="stroke:${hi ? 'var(--acc)' : 'var(--ink)'};stroke-width:${hi ? 2.4 : 1.3};opacity:${hi || !dense ? 1 : .6}" marker-end="url(#${uid}${hi ? 'a' : ''})"/><text x="${mx.toFixed(1)}" y="${(my + 4).toFixed(1)}" text-anchor="middle" style="font-size:${fs}px;font-weight:600;fill:${hi ? 'var(--acc)' : 'var(--ink)'};paint-order:stroke;stroke:var(--paper);stroke-width:3px">${money(v)}</text>`;
     });
-    ids.forEach((n, i) => { const [cx, cy0] = pos[i], cy = cy0 + dy + 22, v = bal[n] || 0;
-      o += `<circle cx="${cx}" cy="${cy}" r="${R}" style="fill:${v < -0.005 ? 'var(--coral)' : v > 0.005 ? 'var(--teal)' : 'var(--line)'}"/><text x="${cx}" y="${cy + 5}" text-anchor="middle" style="font-size:15px;font-weight:700;fill:#1b0f0e">${esc([...String(n)][0] || '?')}</text><text x="${cx}" y="${cy + R + 15}" text-anchor="middle" style="font-size:12px;fill:var(--mute)">${nm(n)}</text>`; });
+    ids.forEach((z, i) => { const [x, y0] = pos[i], y = y0 + dy, v = bal[z] || 0;
+      o += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" style="fill:${v < -0.005 ? 'var(--coral)' : v > 0.005 ? 'var(--teal)' : 'var(--line)'}"/><text x="${x.toFixed(1)}" y="${(y + 4.5).toFixed(1)}" text-anchor="middle" style="font-size:${dense ? 12 : 14}px;font-weight:700;fill:#1b0f0e">${esc(lab[i])}</text>${names ? `<text x="${x.toFixed(1)}" y="${(y + r + 14).toFixed(1)}" text-anchor="middle" style="font-size:12px;fill:var(--mute)">${nm(z)}</text>` : ''}`; });
     return o;
   };
-  const h = X ? 190 : 120;
-  return `<svg class="ds" viewBox="0 0 360 ${h * 2 + 16}" role="img" aria-label="Direct debts compared with the settle-up plan"><defs><marker id="${uid}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" style="stroke:var(--ink)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>${panel('Who owes whom directly', direct, 0)}<line x1="8" x2="352" y1="${h + 4}" y2="${h + 4}" style="stroke:var(--line);stroke-dasharray:4 4"/>${panel('What the plan asks for', planA, h + 16)}</svg>`;
+  const mk = (id, col) => `<marker id="${id}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" style="stroke:${col}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>`;
+  const legend = n > 5 ? `<p class="m" style="margin:6px 0 0">${ids.map((z, i) => '<b>' + esc(lab[i]) + '</b> ' + esc(z)).join(' · ')}</p>` : '';
+  return `<svg class="ds" viewBox="0 0 360 ${Hp * 2 + 12}" role="img" aria-label="Direct debts compared with the settle-up plan"><defs>${mk(uid, 'var(--ink)')}${mk(uid + 'a', 'var(--acc)')}</defs>${panel('Who owes whom directly', direct, 0)}<line x1="8" x2="352" y1="${Hp + 6}" y2="${Hp + 6}" style="stroke:var(--line);stroke-dasharray:4 4"/>${panel('What the plan asks for', planA, Hp + 12)}</svg>${legend}`;
 }
 function suggest(bal) {
   const d = [], c = [];
@@ -753,7 +765,7 @@ function viewTrip(id) {
       const dt = d => { const q = d.split('-'); return q.length === 3 ? mon[+q[1] - 1] + ' ' + (+q[2]) : d; };
       const who = (a, v1, v2) => (a === meN ? 'You ' + v1 : a + ' ' + v2);
       const sideTxt = (P, o) => o.length ? o.map(y => y.v > 0 ? who(P, 'owe', 'owes') + ' ' + esc(y.who) + ' ' + fmt(y.v, c) : esc(y.who) + ' owes ' + (P === meN ? 'you' : esc(P)) + ' ' + fmt(-y.v, c)).join('; ') : '';
-      const plan = suggest(bal), tv = ls.get('tracev', 'd');
+      const plan = suggest(bal), tv = ['d', 't', 'n'].includes(ls.get('tracev', 'd')) ? ls.get('tracev', 'd') : 'd';
       const textPane = x => {
         const t = traceFor(bills, trip.settlements || [], c, x.from, x.to, trip.members), L = t.lines, keep = 4;
         const rows = L.map((l, k) => `<div class="tl"${k < L.length - keep ? ' hidden data-old' : ''}><span>${esc(dt(l.date))} · ${esc(l.text)}<br><span class="m">${esc(l.note)}</span></span><span>${l.d > 0 ? '+' : '−'}${fmt(Math.abs(l.d), c)}</span></div>`).join('');
@@ -765,9 +777,13 @@ function viewTrip(id) {
         const L = ledgerFor(bills, trip.settlements || [], c, x.from), keep = 5, mx = Math.max(1, ...L.map(l => Math.abs(l.run)));
         const rows = L.map((l, k) => `<div class="lg"${k < L.length - keep ? ' hidden data-old' : ''}><div class="lgr"><span>${esc(dt(l.date))} · ${esc(l.text)}<br><span class="m">${esc(l.note)}</span></span><span class="${l.d < 0 ? 'neg' : 'pos'}">${l.d < 0 ? '−' : '+'}${fmt(Math.abs(l.d), c)}</span></div><div class="lb ${l.run < 0 ? 'bn' : 'bp'}" style="width:${Math.max(3, Math.round(100 * Math.abs(l.run) / mx))}%"></div></div>`).join('');
         const out = Math.max(0, -(bal[x.from] || 0)), mine = plan.filter(y => y.from === x.from);
-        return `<p class="m" style="margin:0 0 4px"><b>${esc(x.from === meN ? 'Your' : x.from + "'s")} balance, step by step</b> (${c}, oldest first; bars show the running total)</p>${rows || '<p class="m">No expenses yet.</p>'}${L.length > keep ? `<button class="s lnk" data-more>Show all ${L.length}</button>` : ''}<div class="tot"><div class="lgr"><span>${esc(who(x.from, 'owe', 'owes'))} overall</span><span>${fmt(out, c)}</span></div>${mine.map(y => `<div class="lgr m"><span>→ pays ${esc(y.to === meN ? 'you' : y.to)} (owed ${fmt(Math.max(0, bal[y.to] || 0), c)} overall)</span><span>${fmt(y.amt, c)}</span></div>`).join('')}</div>${arrowPicture(bills, trip.settlements || [], c, x.from, x.to, trip.members, plan, bal)}`;
+        return `<p class="m" style="margin:0 0 4px"><b>${esc(x.from === meN ? 'Your' : x.from + "'s")} balance, step by step</b> (${c}, oldest first; bars show the running total)</p>${rows || '<p class="m">No expenses yet.</p>'}${L.length > keep ? `<button class="s lnk" data-more>Show all ${L.length}</button>` : ''}<div class="tot"><div class="lgr"><span>${esc(who(x.from, 'owe', 'owes'))} overall</span><span>${fmt(out, c)}</span></div>${mine.map(y => `<div class="lgr m"><span>→ pays ${esc(y.to === meN ? 'you' : y.to)} (owed ${fmt(Math.max(0, bal[y.to] || 0), c)} overall)</span><span>${fmt(y.amt, c)}</span></div>`).join('')}</div>`;
       };
-      const traceHtml = x => `<div class="tw"><button class="lnk2" data-tr aria-expanded="false">How this adds up</button><div class="trace" hidden><div class="tgl" role="group" aria-label="View"><button data-v="d" class="${tv === 'd' ? 'on' : ''}">Diagram</button><button data-v="t" class="${tv === 't' ? 'on' : ''}">Text</button></div><div data-pane="d"${tv === 'd' ? '' : ' hidden'}>${diagramPane(x)}</div><div data-pane="t"${tv === 't' ? '' : ' hidden'}>${textPane(x)}</div></div></div>`;
+      const netPane = x => {
+        const mem = (trip.members || []).length, mx = Math.min(10, mem);
+        return `${mx > 2 ? `<div class="cnt"><label>People shown: <b data-cv>${mx}</b></label><input type="range" min="2" max="${mx}" step="1" value="${mx}" data-cnt aria-label="People shown in the picture"></div>` : ''}<div data-pic>${arrowPicture(bills, trip.settlements || [], c, x.from, x.to, trip.members, plan, bal, mx)}</div>${mem > 10 ? '<p class="m">Showing up to 10 people.</p>' : ''}`;
+      };
+      const traceHtml = x => `<div class="tw"><button class="lnk2" data-tr aria-expanded="false">How this adds up</button><div class="trace" hidden><div class="tgl" role="group" aria-label="View"><button data-v="d" class="${tv === 'd' ? 'on' : ''}">Diagram</button><button data-v="t" class="${tv === 't' ? 'on' : ''}">Text</button><button data-v="n" class="${tv === 'n' ? 'on' : ''}">Network</button></div><div data-pane="d"${tv === 'd' ? '' : ' hidden'}>${diagramPane(x)}</div><div data-pane="t"${tv === 't' ? '' : ' hidden'}>${textPane(x)}</div><div data-pane="n"${tv === 'n' ? '' : ' hidden'}>${netPane(x)}</div></div></div>`;
       const ov = document.createElement('div'); ov.className = 'ov';
       ov.innerHTML = `<div class="mb" role="dialog" aria-modal="true" aria-label="Settle up ${esc(n)}" style="max-height:88vh;overflow:auto"><h2>Settle up: ${esc(n)}</h2>${list.map((x, i) => `<div class="ti"><div class="row"><span class="n">${x.from === n ? esc(n) + ' pays ' + esc(x.to) : esc(x.from) + ' pays ' + esc(n)}</span><span class="amt">${fmt(x.amt, c)}</span><button data-i="${i}">Settle up</button></div>${traceHtml(x)}</div>`).join('') || '<p class="m">Nothing to settle.</p>'}<div class="bar" style="justify-content:flex-end"><button class="s" data-close>Close</button></div></div>`;
       const close = () => { document.removeEventListener('keydown', kd, true); ov.remove(); };
@@ -788,6 +804,12 @@ function viewTrip(id) {
           .then(() => { const row = b.closest('.ti'); if (row) row.remove(); if (!list.some(y => !y.done)) close(); })
           .catch(() => { x.done = false; b.disabled = false; errBox('Could not record the payment. Check your connection and try again.'); })
           .finally(() => busy.close());
+      });
+      ov.addEventListener('input', e => {
+        const sl = e.target.closest('[data-cnt]'); if (!sl) return;
+        const ti = sl.closest('.ti'), bt = ti && ti.querySelector('button[data-i]'), x = bt && list[+bt.dataset.i]; if (!x) return;
+        const n = +sl.value; ti.querySelector('[data-cv]').textContent = n;
+        ti.querySelector('[data-pic]').innerHTML = arrowPicture(bills, trip.settlements || [], c, x.from, x.to, trip.members, plan, bal, n);
       });
       document.addEventListener('keydown', kd, true);
       document.body.appendChild(ov);
