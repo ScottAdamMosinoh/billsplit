@@ -146,6 +146,10 @@ input,select,textarea{font-size:max(16px,1rem)}
 .trace{margin:0 0 12px;padding:9px 12px;border-radius:16px;background:var(--bg);box-shadow:inset 0 0 0 1.5px var(--line);font-size:.85rem}.trace .m{font-size:.82rem;margin:4px 0 0}
 .tls{margin:6px 0 2px}.tl{display:flex;justify-content:space-between;gap:10px;padding:3px 0;border-bottom:1px dashed var(--line)}.tl>span:last-child{white-space:nowrap}
 .trace .tot{margin-top:6px;padding-top:6px;font-weight:600}.lnk{padding:4px 10px;font-size:.8rem;margin-top:4px}
+.tw{margin:-2px 0 12px 2px}.lnk2{background:none;box-shadow:none;border-radius:0;padding:2px 0;color:var(--acc);text-decoration:underline;text-underline-offset:3px;font-weight:500;font-size:.88rem}
+.tgl{display:inline-flex;gap:4px;padding:3px;border-radius:999px;box-shadow:inset 0 0 0 1.5px var(--line);margin:0 0 8px;background:var(--paper)}.tgl button{padding:4px 14px;font-size:.82rem;background:transparent;color:var(--ink);box-shadow:none}.tgl button.on{background:var(--acc);color:var(--onacc)}
+.lg{padding:3px 0}.lgr{display:flex;justify-content:space-between;gap:10px}.lgr>span:last-child{white-space:nowrap}.lgr .neg{color:var(--bad)}.lgr .pos{color:var(--pos)}.lb{height:6px;border-radius:99px;margin-top:3px}.lb.bn{background:var(--bad)}.lb.bp{background:var(--pos)}
+.ds{width:100%;height:auto;display:block;margin-top:10px}.trace .tot .lgr{margin-top:2px}
 </style>
 </head>
 <body>
@@ -384,6 +388,49 @@ function traceFor(bills, sets, cur, F, T, members) {
   let run = 0; lines.forEach(l => { run += l.d; l.run = run; });
   const D = debtMatrix(bills, sets, cur), others = P => (members || []).filter(m => m !== P && m !== (P === F ? T : F)).map(m => ({ who: m, v: pairNet(D, P, m) })).filter(x => Math.abs(x.v) > 0.005);
   return { lines, direct: pairNet(D, F, T), fOthers: others(F), tOthers: others(T) };
+}
+// every expense and payment that moved P's overall balance, oldest first, with a running total
+function ledgerFor(bills, sets, cur, P) {
+  const L = [];
+  bills.forEach(b => {
+    if (!b.payer || (b.currency || 'MYR') !== cur) return;
+    const per = calc(b).per, date = b.date || iso(b.created || Date.now()), k = b.created || 0;
+    if (b.payer === P) { const o = Object.entries(per).reduce((a, [n, v]) => a + (n !== P ? v : 0), 0); if (o > 0.005) L.push({ date, k, text: b.name, note: 'Paid for others', d: o }); }
+    else if (per[P] > 0.005) L.push({ date, k, text: b.name, note: 'Share, paid by ' + b.payer, d: -per[P] });
+  });
+  (sets || []).filter(x => (x.cur || 'MYR') === cur).forEach(x => {
+    const date = iso(x.t || Date.now());
+    if (x.from === P) L.push({ date, k: x.t || 0, text: 'Payment', note: 'Paid ' + x.to, d: x.amt });
+    else if (x.to === P) L.push({ date, k: x.t || 0, text: 'Payment', note: x.from + ' paid', d: -x.amt });
+  });
+  L.sort((a, b) => a.date.localeCompare(b.date) || a.k - b.k);
+  let run = 0; L.forEach(l => { run += l.d; l.run = run; });
+  return L;
+}
+// two small arrow pictures for F -> T: who owes whom directly, then what the plan asks for
+function arrowPicture(bills, sets, cur, F, T, members, plan, bal) {
+  const D = debtMatrix(bills, sets, cur);
+  const X = (members || []).filter(m => m !== F && m !== T).map(m => ({ m, w: Math.abs(pairNet(D, F, m)) + Math.abs(pairNet(D, T, m)) })).filter(z => z.w > 0.005).sort((a, b) => b.w - a.w)[0];
+  const ids = X ? [F, T, X.m] : [F, T], pos = [[56, 46], [304, 46], [180, 118]], R = 20, uid = 'ah' + Math.floor(Math.random() * 1e6);
+  const nm = n => { const t = String(n); return esc(t.length > 12 ? t.slice(0, 11) + '…' : t); };
+  const pairs = []; for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) pairs.push([ids[i], ids[j]]);
+  const direct = [], planA = [];
+  pairs.forEach(([a, b]) => { const v = pairNet(D, a, b); if (v > 0.005) direct.push([a, b, v]); else if (v < -0.005) direct.push([b, a, -v]); });
+  plan.forEach(x => { if (ids.includes(x.from) && ids.includes(x.to)) planA.push([x.from, x.to, x.amt]); });
+  const panel = (title, arrows, dy) => {
+    let o = `<text x="8" y="${dy + 4}" style="font-size:13px;font-weight:600;fill:var(--ink)">${title}</text>`;
+    arrows.forEach(([a, b, v]) => {
+      const p = pos[ids.indexOf(a)], q = pos[ids.indexOf(b)], dx = q[0] - p[0], dyy = q[1] - p[1], len = Math.hypot(dx, dyy), ux = dx / len, uy = dyy / len;
+      const x1 = p[0] + ux * (R + 3), y1 = p[1] + uy * (R + 3) + dy + 22, x2 = q[0] - ux * (R + 5), y2 = q[1] - uy * (R + 5) + dy + 22;
+      const mx = (x1 + x2) / 2 - uy * 11, my = (y1 + y2) / 2 + ux * 11;
+      o += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" style="stroke:var(--ink);stroke-width:1.6" marker-end="url(#${uid})"/><text x="${mx.toFixed(1)}" y="${(my + 4).toFixed(1)}" text-anchor="middle" style="font-size:12px;font-weight:600;fill:var(--ink)">${money(v)}</text>`;
+    });
+    ids.forEach((n, i) => { const [cx, cy0] = pos[i], cy = cy0 + dy + 22, v = bal[n] || 0;
+      o += `<circle cx="${cx}" cy="${cy}" r="${R}" style="fill:${v < -0.005 ? 'var(--coral)' : v > 0.005 ? 'var(--teal)' : 'var(--line)'}"/><text x="${cx}" y="${cy + 5}" text-anchor="middle" style="font-size:15px;font-weight:700;fill:#1b0f0e">${esc([...String(n)][0] || '?')}</text><text x="${cx}" y="${cy + R + 15}" text-anchor="middle" style="font-size:12px;fill:var(--mute)">${nm(n)}</text>`; });
+    return o;
+  };
+  const h = X ? 190 : 120;
+  return `<svg class="ds" viewBox="0 0 360 ${h * 2 + 16}" role="img" aria-label="Direct debts compared with the settle-up plan"><defs><marker id="${uid}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" style="stroke:var(--ink)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>${panel('Who owes whom directly', direct, 0)}<line x1="8" x2="352" y1="${h + 4}" y2="${h + 4}" style="stroke:var(--line);stroke-dasharray:4 4"/>${panel('What the plan asks for', planA, h + 16)}</svg>`;
 }
 function suggest(bal) {
   const d = [], c = [];
@@ -706,13 +753,21 @@ function viewTrip(id) {
       const dt = d => { const q = d.split('-'); return q.length === 3 ? mon[+q[1] - 1] + ' ' + (+q[2]) : d; };
       const who = (a, v1, v2) => (a === meN ? 'You ' + v1 : a + ' ' + v2);
       const sideTxt = (P, o) => o.length ? o.map(y => y.v > 0 ? who(P, 'owe', 'owes') + ' ' + esc(y.who) + ' ' + fmt(y.v, c) : esc(y.who) + ' owes ' + (P === meN ? 'you' : esc(P)) + ' ' + fmt(-y.v, c)).join('; ') : '';
-      const traceHtml = x => {
+      const plan = suggest(bal), tv = ls.get('tracev', 'd');
+      const textPane = x => {
         const t = traceFor(bills, trip.settlements || [], c, x.from, x.to, trip.members), L = t.lines, keep = 4;
         const rows = L.map((l, k) => `<div class="tl"${k < L.length - keep ? ' hidden data-old' : ''}><span>${esc(dt(l.date))} · ${esc(l.text)}<br><span class="m">${esc(l.note)}</span></span><span>${l.d > 0 ? '+' : '−'}${fmt(Math.abs(l.d), c)}</span></div>`).join('');
         const dir = t.direct > 0.005 ? who(x.from, 'owe', 'owes') + ' ' + esc(x.to) + ' ' + fmt(t.direct, c) + ' directly' : t.direct < -0.005 ? esc(x.to) + ' ' + (x.to === meN ? 'owe' : 'owes') + ' ' + (x.from === meN ? 'you' : esc(x.from)) + ' ' + fmt(-t.direct, c) + ' directly' : 'Nothing is owed directly between ' + (x.from === meN ? 'you' : esc(x.from)) + ' and ' + (x.to === meN ? 'you' : esc(x.to));
-        const same = Math.abs(t.direct - x.amt) < 0.01;
-        return `<div class="trace"><b>How this adds up</b>${rows ? '<div class="tls">' + rows + '</div>' : '<p class="m">No direct expenses or payments between them.</p>'}${L.length > keep ? `<button class="s lnk" data-more>Show all ${L.length}</button>` : ''}<div class="tot"><span>${dir}</span></div>${same ? '<p class="m">This is exactly what the two of you owe each other, so the plan pays it directly.</p>' : `<p class="m">The plan pays ${fmt(x.amt, c)} instead of ${fmt(Math.max(0, t.direct), c)} because debts are combined across the group to need fewer payments.${[sideTxt(x.from, t.fOthers), sideTxt(x.to, t.tOthers)].filter(Boolean).length ? ' Also counted: ' + [sideTxt(x.from, t.fOthers), sideTxt(x.to, t.tOthers)].filter(Boolean).join('; ') + '.' : ''}</p>`}</div>`;
+        const same = Math.abs(t.direct - x.amt) < 0.01, side = [sideTxt(x.from, t.fOthers), sideTxt(x.to, t.tOthers)].filter(Boolean);
+        return `${rows ? '<div class="tls">' + rows + '</div>' : '<p class="m">No direct expenses or payments between them.</p>'}${L.length > keep ? `<button class="s lnk" data-more>Show all ${L.length}</button>` : ''}<div class="tot"><span>${dir}</span></div>${same ? '<p class="m">This is exactly what the two of you owe each other, so the plan pays it directly.</p>' : `<p class="m">The plan pays ${fmt(x.amt, c)} instead of ${fmt(Math.max(0, t.direct), c)} because debts are combined across the group to need fewer payments.${side.length ? ' Also counted: ' + side.join('; ') + '.' : ''}</p>`}`;
       };
+      const diagramPane = x => {
+        const L = ledgerFor(bills, trip.settlements || [], c, x.from), keep = 5, mx = Math.max(1, ...L.map(l => Math.abs(l.run)));
+        const rows = L.map((l, k) => `<div class="lg"${k < L.length - keep ? ' hidden data-old' : ''}><div class="lgr"><span>${esc(dt(l.date))} · ${esc(l.text)}<br><span class="m">${esc(l.note)}</span></span><span class="${l.d < 0 ? 'neg' : 'pos'}">${l.d < 0 ? '−' : '+'}${fmt(Math.abs(l.d), c)}</span></div><div class="lb ${l.run < 0 ? 'bn' : 'bp'}" style="width:${Math.max(3, Math.round(100 * Math.abs(l.run) / mx))}%"></div></div>`).join('');
+        const out = Math.max(0, -(bal[x.from] || 0)), mine = plan.filter(y => y.from === x.from);
+        return `<p class="m" style="margin:0 0 4px"><b>${esc(x.from === meN ? 'Your' : x.from + "'s")} balance, step by step</b> (${c}, oldest first; bars show the running total)</p>${rows || '<p class="m">No expenses yet.</p>'}${L.length > keep ? `<button class="s lnk" data-more>Show all ${L.length}</button>` : ''}<div class="tot"><div class="lgr"><span>${esc(who(x.from, 'owe', 'owes'))} overall</span><span>${fmt(out, c)}</span></div>${mine.map(y => `<div class="lgr m"><span>→ pays ${esc(y.to === meN ? 'you' : y.to)} (owed ${fmt(Math.max(0, bal[y.to] || 0), c)} overall)</span><span>${fmt(y.amt, c)}</span></div>`).join('')}</div>${arrowPicture(bills, trip.settlements || [], c, x.from, x.to, trip.members, plan, bal)}`;
+      };
+      const traceHtml = x => `<div class="tw"><button class="lnk2" data-tr aria-expanded="false">How this adds up</button><div class="trace" hidden><div class="tgl" role="group" aria-label="View"><button data-v="d" class="${tv === 'd' ? 'on' : ''}">Diagram</button><button data-v="t" class="${tv === 't' ? 'on' : ''}">Text</button></div><div data-pane="d"${tv === 'd' ? '' : ' hidden'}>${diagramPane(x)}</div><div data-pane="t"${tv === 't' ? '' : ' hidden'}>${textPane(x)}</div></div></div>`;
       const ov = document.createElement('div'); ov.className = 'ov';
       ov.innerHTML = `<div class="mb" role="dialog" aria-modal="true" aria-label="Settle up ${esc(n)}" style="max-height:88vh;overflow:auto"><h2>Settle up: ${esc(n)}</h2>${list.map((x, i) => `<div class="ti"><div class="row"><span class="n">${x.from === n ? esc(n) + ' pays ' + esc(x.to) : esc(x.from) + ' pays ' + esc(n)}</span><span class="amt">${fmt(x.amt, c)}</span><button data-i="${i}">Settle up</button></div>${traceHtml(x)}</div>`).join('') || '<p class="m">Nothing to settle.</p>'}<div class="bar" style="justify-content:flex-end"><button class="s" data-close>Close</button></div></div>`;
       const close = () => { document.removeEventListener('keydown', kd, true); ov.remove(); };
@@ -720,7 +775,11 @@ function viewTrip(id) {
       ov.addEventListener('click', e => {
         if (e.target === ov || e.target.closest('[data-close]')) return close();
         const more = e.target.closest('[data-more]');
-        if (more) { const box = more.closest('.trace'); box.querySelectorAll('[data-old]').forEach(z => z.hidden = false); more.remove(); return; }
+        if (more) { const box = more.closest('[data-pane]'); box.querySelectorAll('[data-old]').forEach(z => z.hidden = false); more.remove(); return; }
+        const tr = e.target.closest('[data-tr]');
+        if (tr) { const box = tr.nextElementSibling, open = box.hidden; box.hidden = !open; tr.setAttribute('aria-expanded', String(open)); return; }
+        const vb = e.target.closest('[data-v]');
+        if (vb) { const v = vb.dataset.v; ls.set('tracev', v); ov.querySelectorAll('.trace').forEach(t => { t.querySelectorAll('[data-v]').forEach(z => z.classList.toggle('on', z.dataset.v === v)); t.querySelectorAll('[data-pane]').forEach(z => z.hidden = z.dataset.pane !== v); }); return; }
         const b = e.target.closest('button[data-i]'); if (!b) return;
         const x = list[+b.dataset.i]; if (!x || x.done) return;
         x.done = true; b.disabled = true;
