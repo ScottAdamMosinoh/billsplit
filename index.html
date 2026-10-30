@@ -309,12 +309,22 @@ function splitOK(i) {
   const c = i.claims || [], x = i.split;
   return !!x && c.length > 1 && Object.keys(x).length === c.length && c.every(n => n in x) && Math.abs(c.reduce((a, n) => a + x[n], 0) - 100) < 0.01;
 }
+// Shares are whole cents that add up to the bill. Everyone except the payer is rounded UP to the next cent,
+// and the payer's own share takes whatever is left, so the payer never loses a cent and debtors pay slightly more.
+function centSplit(per, payer, target) {
+  if (!payer) return;
+  const up = v => Math.round(Math.ceil(v * 100 - 1e-7)) / 100;
+  let sum = 0;
+  Object.keys(per).forEach(n => { if (n !== payer) { per[n] = up(per[n]); sum += per[n]; } });
+  if (payer in per) per[payer] = Math.max(0, Math.round((target - sum) * 100) / 100);
+}
 function calc(b) {
   if (b.mode === 'whole') {
     const T = +b.amount || 0, per = {}, names = {};
     if (b.how === 'pct') Object.entries(b.pct || {}).forEach(([n, v]) => { if (v) { per[n] = T * v / 100; names[n] = [v + '%']; } });
     else if (b.how === 'amt') Object.entries(b.amt || {}).forEach(([n, v]) => { if (v) { per[n] = +v; names[n] = ['fixed amount']; } });
     else { const E = b.even || []; E.forEach(n => { per[n] = T / E.length; names[n] = ['equal share']; }); }
+    centSplit(per, b.payer, Math.round(T * 100) / 100);
     return { per, names, total: T, unclaimed: 0, custom: null };
   }
   const items = Object.values(b.items || {});
@@ -349,6 +359,7 @@ function calc(b) {
     }
     unclaimed = 0; custom = { ok, fixed, pct, rest, hasPct };
   }
+  if (b.splitMode !== 'custom') centSplit(per, b.payer, Math.round((sub * f - unclaimed) * 100) / 100);
   return { per, names, total: sub * f, unclaimed, custom };
 }
 function balances(bills, sets, cur) {
@@ -881,6 +892,7 @@ function viewDetail(id) {
     if (b.mode === 'whole') Object.keys(c.per).forEach(n => { lines[n] = [{ t: (c.names[n] || [''])[0], a: c.per[n] }]; });
     else if (b.splitMode === 'equal' || b.splitMode === 'custom') Object.keys(c.per).forEach(n => { lines[n] = [{ t: (c.names[n] || [''])[0], a: c.per[n] }]; });
     else Object.values(b.items || {}).sort((x, y) => (x.o || 0) - (y.o || 0)).forEach(i => { const cl = i.claims || []; cl.forEach(n => { (lines[n] = lines[n] || []).push({ t: i.name, a: i.price * (splitOK(i) ? i.split[n] / 100 : 1 / cl.length) * f }); }); });
+    Object.keys(c.per).forEach(n => { const sm = (lines[n] || []).reduce((a, x) => a + r2(x.a), 0), df = r2(c.per[n] - sm); if (Math.abs(df) >= 0.005 && (lines[n] || []).length) lines[n].push({ t: 'Rounding', a: df }); });
     const paid = n => sets.filter(x => x.bill === id && x.from === n && x.to === pay && (x.cur || 'MYR') === cu).reduce((a, x) => a + (+x.amt || 0), 0);
     return { c, cu, pay, sets, lines, paid, left: n => Math.max(0, r2((c.per[n] || 0) - paid(n))) };
   };
