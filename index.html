@@ -1017,7 +1017,7 @@ async function viewExpense(id, tripId) {
       ${ui.who === i ? `<div class="dd"><div class="ph"><b>Who bought this?</b><span><button class="s" data-a="wa">${M.every(m => it.c.includes(m)) ? 'Unselect all' : 'Select all'}</button> <button data-a="wd">Done</button></span></div>${ticks(M, it.c, 'wt')}</div>` : ''}`).join('')}
       <div class="bar"><button class="s" data-a="addrow">+ Add row</button><button class="s" data-a="cam">Scan receipt</button><button class="s" data-a="gal">From gallery</button></div><p class="m" id="scm">${esc(scanning)}</p><p class="m" id="tot"></p></div>`;
     }
-    const fxCard = `<div class="card"><h2>Actual amount charged (optional)</h2><p class="m">What your card or bank really charged, in another currency. It only feeds your conversion rate on the Members page and never changes the split.</p><div class="f"><input type="number" inputmode="decimal" step="0.01" min="0" data-f="fxAmt" placeholder="Amount" aria-label="Actual amount charged" value="${esc(d.fxAmt)}"><select data-f="fxCur" aria-label="Currency charged">${CURS.map(c => `<option ${c === d.fxCur ? 'selected' : ''}>${c}</option>`).join('')}</select></div></div>`;
+    const fxCard = `<div class="card"><h2>Actual amount charged (optional)</h2><p class="m">What your card or bank really charged, usually in another currency (MYR is allowed for both). It only feeds your conversion rate on the Members page and never changes the split.</p><div class="f"><input type="number" inputmode="decimal" step="0.01" min="0" data-f="fxAmt" placeholder="Amount" aria-label="Actual amount charged" value="${esc(d.fxAmt)}"><select data-f="fxCur" aria-label="Currency charged">${CURS.map(c => `<option ${c === d.fxCur ? 'selected' : ''}>${c}</option>`).join('')}</select></div></div>`;
     app.innerHTML = `<div class="hd"><a href="${tripId ? '#/t/' + esc(tripId) : '#/'}">‹ ${tripId ? 'Group' : 'Groups'}</a><h1>${id ? 'Edit expense' : 'Add expense'}</h1></div>${top}${head}${main}${fxCard}
     <div class="bar"><button data-a="save">Save expense</button>${d.lock ? '<button class="s" data-a="lk">Change password</button><button class="s" data-a="rl">Remove lock</button>' : '<button class="s" data-a="lk">Lock expense</button>'}${id ? '<button class="s" data-a="del">Delete</button>' : ''}</div>`;
     hint();
@@ -1049,7 +1049,7 @@ async function viewExpense(id, tripId) {
     if (String(d.fxAmt).trim() !== '') {
       const fa = parseFloat(d.fxAmt);
       if (!(fa > 0)) return alert('Enter a valid actual amount, or leave it blank.');
-      if (d.fxCur === d.cur) return alert('The actual amount must be in a different currency from the expense.');
+      if (d.fxCur === d.cur && d.cur !== 'MYR') return alert('The actual amount must be in a different currency from the expense, unless both are MYR.');
       o.fx = { cur: d.fxCur, amt: fa }; ls.set('fxcur', d.fxCur);
     }
     saving = true;
