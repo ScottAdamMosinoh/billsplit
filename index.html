@@ -577,7 +577,7 @@ function newBill(tripId) {
 
 // ---------- trip ----------
 function viewTrip(id) {
-  let trip = null, bills = [], tab = 'x', cmp = null, cv = { ba: '', bc: 'JPY', pa: '', pc: 'MYR' };
+  let trip = null, bills = [], tab = 'x', xf = ls.get('xf_' + id, 'all') === 'mine' ? 'mine' : 'all', cmp = null, cv = { ba: '', bc: 'JPY', pa: '', pc: 'MYR' };
   const ref = db.collection('trips').doc(id);
   const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const draw = () => {
@@ -602,7 +602,11 @@ function viewTrip(id) {
     const meCard = !me && trip.members.length ? `<div class="card"><h2>Who are you?</h2><div class="chips">${chips()}</div></div>` : '';
     let body = '';
     if (tab === 'x') {
-      body = [...bills].sort((a, b) => (b.date || iso(b.created)).localeCompare(a.date || iso(a.created)) || b.created - a.created).map(b => {
+      const sortedB = [...bills].sort((a, b) => (b.date || iso(b.created)).localeCompare(a.date || iso(a.created)) || b.created - a.created);
+      const involved = b => { try { return b.payer === me || calc(b).per[me] > 0.005; } catch (e) { return false; } };
+      const mineList = me ? sortedB.filter(involved) : [], onlyMine = !!me && xf === 'mine';
+      const toggle = me && bills.length ? `<div class="seg" role="group" aria-label="Which expenses to show"><button class="${onlyMine ? '' : 'on'}" data-a="xf" data-v="all">All expenses (${bills.length})</button><button class="${onlyMine ? 'on' : ''}" data-a="xf" data-v="mine">Mine (${mineList.length})</button></div>` : '';
+      body = (onlyMine ? mineList : sortedB).map(b => {
         const c = calc(b), [yy, mm, dd] = (b.date || iso(b.created)).split('-').map(Number), cu = b.currency || 'MYR';
         let st = '<span class="m">no payer yet</span>';
         if (me && b.payer) {
@@ -611,8 +615,8 @@ function viewTrip(id) {
           else st = '<span class="m">not involved</span>';
         }
         return `<div class="row ex2"><a class="exm" href="#/v/${esc(b._id)}"><span class="dt">${mon[mm - 1]}<br><b>${dd}</b>${yy !== new Date().getFullYear() ? '<br>' + yy : ''}</span><span class="n"><b>${esc(b.name)}</b>${b.lock ? ' <span class="tag">Locked</span>' : ''}<br><span class="m">${b.payer ? esc(b.payer === me ? 'You' : b.payer) + ' paid ' + fmt(c.total, cu) : fmt(c.total, cu)}</span></span><span class="st">${st}</span></a><a class="ebtn" href="#/b/${esc(b._id)}" aria-label="Edit ${esc(b.name)}" title="Edit">✎</a></div>`;
-      }).join('') || '<p class="m">No expenses yet. Tap Add expense to record the first one.</p>';
-      body = `<div class="card">${body}</div>`;
+      }).join('') || (onlyMine ? '<p class="m">You are not involved in any expense yet. Switch to All expenses to see the rest.</p>' : '<p class="m">No expenses yet. Tap Add expense to record the first one.</p>');
+      body = toggle + `<div class="card">${body}</div>`;
     } else if (tab === 'a') {
       const by = {}, byP = {};
       bills.forEach(b => { let c = null; try { c = calc(b); } catch (e) {} const t = c ? c.total : 0; if (!(t > 0)) return; const cu = b.currency || 'MYR', k = b.category || ''; by[cu] = by[cu] || {}; by[cu][k] = (by[cu][k] || 0) + t; byP[cu] = byP[cu] || {}; Object.entries(c.per).forEach(([n, v]) => { if (v > 0.005) byP[cu][n] = (byP[cu][n] || 0) + v; }); });
@@ -672,6 +676,7 @@ function viewTrip(id) {
   sub(db.collection('bills').where('tripId', '==', id), q => { bills = q.docs.map(d => ({ ...d.data(), _id: d.id })); draw(); });
   on({
     tab: el => { tab = el.dataset.v; draw(); },
+    xf: el => { xf = el.dataset.v === 'mine' ? 'mine' : 'all'; ls.set('xf_' + id, xf); draw(); },
     me: el => { ls.set('me_' + id, el.dataset.n); draw(); },
     inv: el => { const f = ls.get('inv_' + id, {}); f[el.dataset.k] = !f[el.dataset.k]; ls.set('inv_' + id, f); draw(); },
     cmp: el => { cmp = cmp === el.dataset.k ? null : el.dataset.k; draw(); },
